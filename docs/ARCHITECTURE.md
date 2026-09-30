@@ -15,6 +15,10 @@ src/
 │   │   ├── selectors.ts    # Pure, memoizable derivations over tasks
 │   │   ├── taskMeta.ts     # Labels/icons for sizes and categories
 │   │   └── index.ts        # Public API of the feature
+│   ├── calendar/           # Timeline views (Yesterday/Today/Tomorrow/Week)
+│   │   ├── components/     # TimelineNav
+│   │   ├── store/          # calendarSlice.ts (not persisted)
+│   │   └── timeline.ts     # Pure view -> date-range logic (local time, DST-safe)
 │   ├── filters/            # Cross-filtering: filter state + filter UI
 │   │   ├── components/
 │   │   ├── store/          # filtersSlice.ts
@@ -29,7 +33,8 @@ src/
 │   └── migrations.ts       # Versioned migrations for persisted state
 ├── services/
 │   └── storage.ts          # Persistence adapter (AsyncStorage now, API later)
-├── lib/                    # Generic helpers, polyfills.ts (crypto.randomUUID)
+├── lib/                    # polyfills.ts (crypto.randomUUID), i18n.ts
+├── locales/                # he.ts (base, defines the keys), en.ts
 ├── types/
 │   └── task.ts             # Domain models (shared across features)
 └── theme/                  # Design tokens (colors, spacing) for StyleSheet
@@ -45,13 +50,18 @@ See `src/types/task.ts`.
 
 ## State management: Zustand
 
-- One store composed of slices (`tasks`, `filters`, later `ui`/`reflection`).
+- One small store per feature (`useTasksStore`, `useCalendarStore`, later
+  filters). Cross-feature derivations live in hooks that read several stores.
+  This lets each store choose its own persistence (tasks: persisted;
+  calendar view: not, so the app always opens on Today).
 - Components subscribe to narrow selectors, so editing one task does not
   re-render the whole tree (the main weakness of Context for this app).
 - Cross-filtering lives in pure selectors (`applyFilters`) combining the
   `tasks` and `filters` slices; filter state is kept separate from data so
   filters can later be synced to the URL or saved as presets.
-- `persist` middleware with a `version` + `migrate` handles schema evolution.
+- Tasks use `persist` with AsyncStorage (key `conmis.tasks`), a `version` +
+  `migrate` for schema evolution, and `useTasksHydrated()` to gate rendering
+  until saved data has loaded.
 - Far less boilerplate than Redux Toolkit, while keeping devtools support.
 
 ## Styling: React Native `StyleSheet`
@@ -59,3 +69,12 @@ See `src/types/task.ts`.
 Chosen over NativeWind for stability: no Babel/Metro/Tailwind build layer to
 keep in sync across Expo SDK upgrades, and full typing of style props. Colors
 come from light/dark palettes selected with `useColorScheme()`.
+
+## Internationalization
+
+i18next + react-i18next. Hebrew is the base language: `locales/he.ts` defines
+the keys and `en.ts` must match its shape; keys are type-checked in `t()`.
+The language is detected from the device (first supported of he/en, else he).
+RTL is enabled via the expo-localization plugin (`supportsRTL`); if the app
+language and the device's direction disagree, `I18nManager.forceRTL` applies
+the correct direction from the next launch.

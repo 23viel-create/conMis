@@ -24,7 +24,20 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
-    ]
+      "expo-font",
+      [
+        "expo-localization",
+        {
+          "supportsRTL": true,
+          "supportedLocales": [
+            "he",
+            "en"
+          ]
+        }
+      ]
+    ],
+    "extra": {
+      "supportsRTL": true
+    }
   }
 }

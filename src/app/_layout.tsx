@@ -1,4 +1,5 @@
 import '../lib/polyfills';
+import '../lib/i18n';
 
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';

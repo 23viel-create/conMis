@@ -1,4 +1,7 @@
+import { useSyncExternalStore } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create, type StateCreator } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import { TASK_DEFAULTS, type NewTaskInput, type Task, type TaskId } from '../../../types/task';
 
 export interface TasksSlice {
@@ -12,15 +15,15 @@ export interface TasksSlice {
   toggleComplete: (id: TaskId) => void;
 }
 
+/** Only data is persisted; actions are recreated on every launch. */
+type PersistedTasks = Pick<TasksSlice, 'tasks'>;
+
 // On native, crypto.randomUUID is provided by src/lib/polyfills.ts (expo-crypto).
 const generateId = (): string => crypto.randomUUID();
 
-/**
- * Slice creator, kept separate from the hook so it can be composed into the
- * root store (`src/store/index.ts`) once the filters slice and persistence
- * are added.
- */
-export const createTasksSlice: StateCreator<TasksSlice> = (set) => ({
+export const createTasksSlice: StateCreator<TasksSlice, [['zustand/persist', unknown]]> = (
+  set,
+) => ({
   tasks: [],
 
   addTask: (input) => {
@@ -53,4 +56,40 @@ export const createTasksSlice: StateCreator<TasksSlice> = (set) => ({
   },
 });
 
-export const useTasksStore = create<TasksSlice>()(createTasksSlice);
+/**
+ * Bump when the persisted shape of `Task` changes, and teach `migrate` how to
+ * upgrade older snapshots, so existing users never lose their tasks.
+ */
+const STORAGE_VERSION = 1;
+
+export const useTasksStore = create<TasksSlice>()(
+  persist(createTasksSlice, {
+    name: 'conmis.tasks',
+    storage: createJSONStorage<PersistedTasks>(() => AsyncStorage),
+    version: STORAGE_VERSION,
+    partialize: (state) => ({ tasks: state.tasks }),
+    migrate: (persisted, fromVersion) => {
+      // No older versions exist yet. Future: `if (fromVersion < 2) { ... }`.
+      void fromVersion;
+      return persisted as PersistedTasks;
+    },
+  }),
+);
+
+function subscribeToHydration(onChange: () => void): () => void {
+  const unsubHydrate = useTasksStore.persist.onHydrate(onChange);
+  const unsubFinish = useTasksStore.persist.onFinishHydration(onChange);
+  return () => {
+    unsubHydrate();
+    unsubFinish();
+  };
+}
+
+/**
+ * True once saved tasks have been loaded from AsyncStorage. Screens should
+ * wait for this: it avoids flashing the empty state on launch, and a task
+ * added before hydration finishes would be overwritten by the loaded data.
+ */
+export function useTasksHydrated(): boolean {
+  return useSyncExternalStore(subscribeToHydration, () => useTasksStore.persist.hasHydrated());
+}
