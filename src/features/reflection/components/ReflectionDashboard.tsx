@@ -11,7 +11,8 @@ import { useTasksStore } from '../../tasks/store/tasksSlice';
 import { CATEGORY_ICONS, useTaskLabels } from '../../tasks/taskMeta';
 import { findHolidays } from '../holidays';
 import { REFLECTION_PERIODS, getPeriodRange, type ReflectionPeriod } from '../periods';
-import { summarizeReflection, type RateStat } from '../selectors';
+import { selectTrend, selectWeekdayTrend, summarizeReflection, type RateStat } from '../selectors';
+import { TrendChart, type ChartBar } from './TrendChart';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -30,7 +31,7 @@ export function ReflectionDashboard() {
   const colors = useColors();
   const { t, i18n } = useTranslation();
   const labels = useTaskLabels();
-  const [period, setPeriod] = useState<ReflectionPeriod>('week');
+  const [period, setPeriod] = useState<ReflectionPeriod>('last7');
 
   const range = useMemo(() => getPeriodRange(period, today, tasks), [period, today, tasks]);
   const summary = useMemo(() => summarizeReflection(tasks, range, today), [tasks, range, today]);
@@ -50,6 +51,79 @@ export function ReflectionDashboard() {
       : `${shortDate.format(dayKeyToDate(first))} – ${shortDate.format(dayKeyToDate(last))}`;
 
   const lastDay = today; // ranges always end with today
+
+  // Trend chart: daily (or weekly, for long ranges) on-time rates by intended
+  // day; in the weekday view, averages per day of week across all time.
+  const chart = useMemo(() => {
+    const rateText = (rate: number | null) => (rate === null ? '' : percent.format(rate));
+    const describe = (label: string, planned: number, onTime: number, rate: number | null) =>
+      planned === 0
+        ? t('reflection.trendBarEmpty', { label })
+        : t('reflection.trendBar', { label, onTime, planned, rate: rateText(rate) });
+
+    if (period === 'weekday') {
+      const weekdayShort = new Intl.DateTimeFormat(i18n.language, { weekday: 'short' });
+      const weekdayLong = new Intl.DateTimeFormat(i18n.language, { weekday: 'long' });
+      // 2026-09-27 is a Sunday: add the weekday index to get a sample date.
+      const sample = (weekday: number) => new Date(2026, 8, 27 + weekday);
+      const bars: ChartBar[] = selectWeekdayTrend(tasks, range, today).map((bar) => ({
+        key: String(bar.weekday),
+        axisLabel: weekdayShort.format(sample(bar.weekday)),
+        description: describe(
+          weekdayLong.format(sample(bar.weekday)),
+          bar.planned,
+          bar.onTime,
+          bar.rate,
+        ),
+        planned: bar.planned,
+        onTime: bar.onTime,
+        rate: bar.rate,
+      }));
+      return { title: t('reflection.trendWeekday'), hint: t('reflection.weekdayHint'), bars };
+    }
+
+    const trend = selectTrend(tasks, range, today);
+    const weekly = trend.some((bar) => bar.days > 1);
+    const dayLong = new Intl.DateTimeFormat(i18n.language, {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    });
+    const axis = new Intl.DateTimeFormat(
+      i18n.language,
+      weekly
+        ? { day: 'numeric', month: 'numeric' }
+        : trend.length <= 7
+          ? { weekday: 'short' }
+          : { day: 'numeric' },
+    );
+    const bars: ChartBar[] = trend.map((bar) => {
+      const date = dayKeyToDate(bar.start);
+      const base = weekly
+        ? t('reflection.trendWeekOf', { date: shortDate.format(date) })
+        : dayLong.format(date);
+      const label = bar.inProgress ? t('reflection.trendToday', { label: base }) : base;
+      return {
+        key: bar.start,
+        axisLabel: axis.format(date),
+        description: describe(label, bar.planned, bar.onTime, bar.rate),
+        planned: bar.planned,
+        onTime: bar.onTime,
+        rate: bar.rate,
+        inProgress: bar.inProgress,
+      };
+    });
+    return {
+      title: weekly ? t('reflection.trendWeekly') : t('reflection.trendDaily'),
+      hint: t('reflection.trendHint'),
+      bars,
+    };
+  }, [period, tasks, range, today, t, i18n.language, percent, shortDate]);
+
+  const chartTotals = chart.bars.reduce(
+    (sum, bar) => ({ planned: sum.planned + bar.planned, onTime: sum.onTime + bar.onTime }),
+    { planned: 0, onTime: 0 },
+  );
   const { execution, postponements } = summary;
 
   return (
@@ -104,6 +178,34 @@ export function ReflectionDashboard() {
                   </Detail>
                 )}
               </View>
+            </>
+          )}
+        </Card>
+
+        {/* Trend */}
+        <Card colors={colors}>
+          <Text style={[styles.cardLabel, { color: colors.textMuted }]} accessibilityRole="header">
+            {chart.title}
+          </Text>
+          {chartTotals.planned === 0 ? (
+            <Text style={[styles.body, { color: colors.textMuted }]}>
+              {t('reflection.trendNone')}
+            </Text>
+          ) : (
+            <>
+              <TrendChart
+                // Reset the tapped column when the period changes.
+                key={period}
+                bars={chart.bars}
+                labelAll={period === 'weekday'}
+                summary={t('reflection.trendSummary', {
+                  onTime: chartTotals.onTime,
+                  planned: chartTotals.planned,
+                  rate: percent.format(chartTotals.onTime / chartTotals.planned),
+                })}
+                colors={colors}
+              />
+              <Text style={[styles.small, { color: colors.textMuted }]}>{chart.hint}</Text>
             </>
           )}
         </Card>
@@ -210,6 +312,7 @@ export function ReflectionDashboard() {
 
 /* ----------------------------------------------------------- Pieces */
 
+/** Period chips in one scrollable row; it scopes everything below it. */
 function PeriodPicker({
   value,
   onChange,
@@ -221,10 +324,12 @@ function PeriodPicker({
 }) {
   const { t } = useTranslation();
   return (
-    <View
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
       accessibilityRole="radiogroup"
       accessibilityLabel={t('reflection.periodLabel')}
-      style={[styles.segmented, { backgroundColor: colors.field }]}
+      contentContainerStyle={styles.periodRow}
     >
       {REFLECTION_PERIODS.map((period) => {
         const selected = period === value;
@@ -234,15 +339,20 @@ function PeriodPicker({
             onPress={() => onChange(period)}
             accessibilityRole="radio"
             aria-checked={selected}
-            style={[styles.segment, selected && { backgroundColor: colors.segmentActive }]}
+            style={({ pressed }) => [
+              styles.periodChip,
+              {
+                borderColor: selected ? colors.accent : colors.border,
+                backgroundColor: selected ? colors.accentSoft : colors.card,
+              },
+              pressed && { opacity: 0.6 },
+            ]}
           >
             <Text
-              numberOfLines={1}
-              adjustsFontSizeToFit
               style={[
-                styles.segmentText,
-                { color: selected ? colors.accentText : colors.textMuted },
-                selected && styles.segmentTextSelected,
+                styles.periodText,
+                { color: selected ? colors.accentText : colors.text },
+                selected && styles.periodTextSelected,
               ]}
             >
               {t(`reflection.periods.${period}`)}
@@ -250,7 +360,7 @@ function PeriodPicker({
           </Pressable>
         );
       })}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -402,17 +512,16 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: '700' },
   rangeCaption: { fontSize: 13, textAlign: 'center', marginTop: -6 },
 
-  segmented: { flexDirection: 'row', borderRadius: 12, padding: 4 },
-  segment: {
-    flex: 1,
-    height: 38,
-    borderRadius: 9,
-    alignItems: 'center',
+  periodRow: { gap: 8, paddingEnd: 16 },
+  periodChip: {
+    height: 36,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    borderWidth: 1,
     justifyContent: 'center',
-    paddingHorizontal: 4,
   },
-  segmentText: { fontSize: 14, fontWeight: '500' },
-  segmentTextSelected: { fontWeight: '700' },
+  periodText: { fontSize: 14, fontWeight: '500' },
+  periodTextSelected: { fontWeight: '700' },
 
   card: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 16, gap: 10 },
   cardLabel: { fontSize: 12, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase' },

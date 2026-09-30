@@ -5,11 +5,13 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import { isDayKey, toDayKey } from '../../../lib/dayKey';
 import {
   TASK_DEFAULTS,
+  isUserNote,
   type NewTaskInput,
   type Note,
   type NoteId,
   type NoteKind,
   type Task,
+  type UserNoteKind,
   type TaskId,
   type TaskPatch,
 } from '../../../types/task';
@@ -34,28 +36,36 @@ export interface TasksSlice {
   /**
    * Edits title, size, category or date. Moving `scheduledFor` later than
    * the task's current day appends a reschedule note (with the reason).
+   * `originalScheduledFor` (the intention) never moves, except that an
+   * unscheduled task's first day becomes its intention.
    * A blank title or malformed date in the patch is ignored.
    */
   updateTask: (id: TaskId, patch: TaskPatch, options?: UpdateTaskOptions) => void;
-  /** Appends a note. Returns it, or `null` if the content is blank. */
-  addNoteToTask: (taskId: TaskId, content: string, isPinned?: boolean) => Note | null;
+  /** Appends a user note (default kind 'comment'). Returns it, or `null` if blank. */
+  addNoteToTask: (
+    taskId: TaskId,
+    content: string,
+    isPinned?: boolean,
+    kind?: UserNoteKind,
+  ) => Note | null;
   toggleNotePin: (taskId: TaskId, noteId: NoteId) => void;
   /** Checks or unchecks one '- [ ]' line inside a note. */
   toggleNoteChecklistItem: (taskId: TaskId, noteId: NoteId, lineIndex: number) => void;
   /** Removes a task and its whole notes log. */
   deleteTask: (id: TaskId) => void;
   /**
-   * Replaces a user note's text. Blank content is ignored (delete instead).
-   * Reschedule notes are a factual record and can't be edited.
+   * Replaces a user note's text, and optionally its kind. Blank content is
+   * ignored (delete instead). Reschedule notes are a factual record and
+   * can't be edited.
    */
-  editNote: (taskId: TaskId, noteId: NoteId, newContent: string) => void;
+  editNote: (taskId: TaskId, noteId: NoteId, newContent: string, kind?: UserNoteKind) => void;
   deleteNote: (taskId: TaskId, noteId: NoteId) => void;
 }
 
 // On native, crypto.randomUUID is provided by src/lib/polyfills.ts (expo-crypto).
 const generateId = (): string => crypto.randomUUID();
 
-function createNote(content: string, kind: NoteKind = 'user', isPinned = false): Note {
+function createNote(content: string, kind: NoteKind = 'comment', isPinned = false): Note {
   return { id: generateId(), content, createdAt: Date.now(), isPinned, kind };
 }
 
@@ -78,6 +88,9 @@ export const createTasksSlice: StateCreator<TasksSlice, [['zustand/persist', unk
     if (!title) return null;
 
     const firstNote = input.notes?.trim();
+    const scheduledFor = isDayKey(input.scheduledFor)
+      ? input.scheduledFor
+      : TASK_DEFAULTS.scheduledFor;
     const task: Task = {
       id: generateId(),
       title,
@@ -86,7 +99,9 @@ export const createTasksSlice: StateCreator<TasksSlice, [['zustand/persist', unk
       notes: firstNote ? [createNote(firstNote)] : [],
       createdAt: Date.now(),
       completedAt: null,
-      scheduledFor: isDayKey(input.scheduledFor) ? input.scheduledFor : TASK_DEFAULTS.scheduledFor,
+      scheduledFor,
+      // The intention starts as the planned day and never moves with reschedules.
+      originalScheduledFor: scheduledFor,
     };
 
     // Stored in creation order; display ordering is the job of selectors.
@@ -117,6 +132,9 @@ export const createTasksSlice: StateCreator<TasksSlice, [['zustand/persist', unk
           const to = patch.scheduledFor;
           if (to === null || isDayKey(to)) {
             next.scheduledFor = to;
+            // First commitment of an unscheduled task becomes its intention;
+            // after that, only scheduledFor moves.
+            if (task.originalScheduledFor === null && to !== null) next.originalScheduledFor = to;
             const today = toDayKey();
             if (to !== task.scheduledFor && isPostponement(task.scheduledFor, to, today)) {
               const content = buildRescheduleNote(
@@ -133,10 +151,10 @@ export const createTasksSlice: StateCreator<TasksSlice, [['zustand/persist', unk
     }));
   },
 
-  addNoteToTask: (taskId, content, isPinned = false) => {
+  addNoteToTask: (taskId, content, isPinned = false, kind = 'comment') => {
     const text = content.trim();
     if (!text) return null;
-    const note = createNote(text, 'user', isPinned);
+    const note = createNote(text, kind, isPinned);
     set((state) => ({
       tasks: mapTask(state.tasks, taskId, (task) => ({ ...task, notes: [...task.notes, note] })),
     }));
@@ -166,12 +184,14 @@ export const createTasksSlice: StateCreator<TasksSlice, [['zustand/persist', unk
     set((state) => ({ tasks: state.tasks.filter((task) => task.id !== id) }));
   },
 
-  editNote: (taskId, noteId, newContent) => {
+  editNote: (taskId, noteId, newContent, kind) => {
     const content = newContent.trim();
     if (!content) return;
     set((state) => ({
       tasks: mapTask(state.tasks, taskId, (task) =>
-        mapNote(task, noteId, (note) => (note.kind === 'user' ? { ...note, content } : note)),
+        mapNote(task, noteId, (note) =>
+          isUserNote(note) ? { ...note, content, kind: kind ?? note.kind } : note,
+        ),
       ),
     }));
   },

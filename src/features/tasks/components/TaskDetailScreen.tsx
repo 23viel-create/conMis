@@ -5,11 +5,13 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentProps,
   type ComponentRef,
   type ReactNode,
 } from 'react';
 import {
   FlatList,
+  ScrollView,
   I18nManager,
   Keyboard,
   KeyboardAvoidingView,
@@ -27,13 +29,24 @@ import { useTranslation } from 'react-i18next';
 import { ActionSheet } from '../../../components/ui/ActionSheet';
 import { addDaysToKey } from '../../../lib/dayKey';
 import { formatDay, formatHebrewDay } from '../../../lib/dateFormat';
-import type { DayKey, Note, NoteId, Task, TaskId } from '../../../types/task';
+import {
+  USER_NOTE_KINDS,
+  isUserNote,
+  type DayKey,
+  type Note,
+  type NoteId,
+  type NoteKind,
+  type Task,
+  type TaskId,
+  type UserNoteKind,
+} from '../../../types/task';
 import { useColors, type Colors } from '../../../theme/colors';
 import { useTodayKey } from '../../calendar';
 import { isPostponement } from '../rescheduling';
 import { sortNotes, type NoteOrder } from '../selectors';
 import { useTasksStore } from '../store/tasksSlice';
 import { CategoryPicker } from './CategoryPicker';
+import { NOTE_KIND_ICONS, noteKindColor, useNoteKindLabel } from '../notes/noteKinds';
 import { NoteContent } from './NoteContent';
 import { SizePicker } from './SizePicker';
 
@@ -64,14 +77,29 @@ export function TaskDetailScreen({ taskId }: TaskDetailScreenProps) {
   const openNoteMenu = useCallback((note: Note) => setMenuNote(note), []);
   const listRef = useRef<FlatList<Note>>(null);
 
-  const notes = useMemo(() => sortNotes(task?.notes ?? [], order), [task?.notes, order]);
+  const [kindFilter, setKindFilter] = useState<NoteKind | 'all'>('all');
+
+  const sorted = useMemo(() => sortNotes(task?.notes ?? [], order), [task?.notes, order]);
+  const kindCounts = useMemo(() => {
+    const counts = new Map<NoteKind, number>();
+    for (const note of sorted) counts.set(note.kind, (counts.get(note.kind) ?? 0) + 1);
+    return counts;
+  }, [sorted]);
+  // A filter whose last note was deleted falls back to "All".
+  const activeFilter = kindFilter !== 'all' && kindCounts.has(kindFilter) ? kindFilter : 'all';
+  const notes = useMemo(
+    () => (activeFilter === 'all' ? sorted : sorted.filter((note) => note.kind === activeFilter)),
+    [sorted, activeFilter],
+  );
 
   function goBack() {
     if (router.canGoBack()) router.back();
     else router.replace('/');
   }
 
-  function revealNewNote() {
+  function revealNewNote(kind: NoteKind) {
+    // Make sure the new note isn't hidden by the active filter.
+    if (activeFilter !== 'all' && activeFilter !== kind) setKindFilter('all');
     // Newest-first: new notes sit right after the pinned ones; oldest-first: at the end.
     requestAnimationFrame(() => {
       if (order === 'oldest') {
@@ -110,7 +138,7 @@ export function TaskDetailScreen({ taskId }: TaskDetailScreenProps) {
                 onTogglePin={toggleNotePin}
                 onToggleItem={toggleChecklistItem}
                 // Reschedule notes are a factual record: no edit/delete menu.
-                onLongPress={item.kind === 'user' ? openNoteMenu : undefined}
+                onLongPress={isUserNote(item) ? openNoteMenu : undefined}
                 isEditing={item.id === editingNote?.id}
               />
             )}
@@ -118,11 +146,20 @@ export function TaskDetailScreen({ taskId }: TaskDetailScreenProps) {
               <>
                 <TaskEditor task={task} colors={colors} />
                 <NotesHeader
-                  count={notes.length}
+                  count={sorted.length}
                   order={order}
                   onChangeOrder={setOrder}
                   colors={colors}
                 />
+                {kindCounts.size > 1 && (
+                  <NoteKindFilter
+                    counts={kindCounts}
+                    total={sorted.length}
+                    value={activeFilter}
+                    onChange={setKindFilter}
+                    colors={colors}
+                  />
+                )}
               </>
             }
             ListEmptyComponent={
@@ -344,6 +381,13 @@ function DateEditor({ task, colors }: { task: Task; colors: Colors }) {
           {hebrew && (current !== null || pending !== null) && (
             <Text style={[styles.dateHebrew, { color: colors.textMuted }]}>{hebrew}</Text>
           )}
+          {task.originalScheduledFor !== null && task.originalScheduledFor !== current && (
+            <Text style={[styles.dateHebrew, { color: colors.textMuted }]} numberOfLines={1}>
+              {t('taskDetail.originally', {
+                date: formatDay(task.originalScheduledFor, i18n.language),
+              })}
+            </Text>
+          )}
         </View>
         <StepButton
           icon={I18nManager.isRTL ? 'chevron-back' : 'chevron-forward'}
@@ -528,7 +572,9 @@ const NoteCard = memo(function NoteCard({
   isEditing,
 }: NoteCardProps) {
   const { t, i18n } = useTranslation();
+  const kindLabel = useNoteKindLabel();
   const isSystem = note.kind === 'reschedule';
+  const kindColor = noteKindColor(note.kind, colors);
   const timestamp = useMemo(
     () =>
       new Intl.DateTimeFormat(i18n.language, {
@@ -554,16 +600,24 @@ const NoteCard = memo(function NoteCard({
         {
           backgroundColor: isSystem ? colors.field : colors.card,
           borderColor: isEditing || note.isPinned ? colors.accent : colors.border,
+          // Kind cue: a colored start edge (mirrors in RTL), plus icon + label below.
+          borderStartWidth: 4,
+          borderStartColor: kindColor,
         },
         isEditing && styles.noteCardEditing,
         pressed && styles.pressed,
       ]}
     >
-      {isSystem && (
+      {/* Every kind except the default 'comment' is named, so color is never alone. */}
+      {note.kind !== 'comment' && (
         <View style={styles.noteTag}>
-          <Ionicons name="time-outline" size={14} color={colors.textMuted} />
+          <Ionicons
+            name={NOTE_KIND_ICONS[note.kind]}
+            size={14}
+            color={isSystem ? colors.textMuted : kindColor}
+          />
           <Text style={[styles.noteTagText, { color: colors.textMuted }]}>
-            {t('notes.rescheduledTag')}
+            {isSystem ? t('notes.rescheduledTag') : kindLabel(note.kind)}
           </Text>
         </View>
       )}
@@ -601,6 +655,144 @@ function NoteSeparator() {
   return <View style={styles.noteSeparator} />;
 }
 
+/* ------------------------------------------------------ Note kind chips */
+
+/** Kind chips shown in the composer. Default: comment. */
+function NoteKindPicker({
+  value,
+  onChange,
+  colors,
+}: {
+  value: UserNoteKind;
+  onChange: (kind: UserNoteKind) => void;
+  colors: Colors;
+}) {
+  const { t } = useTranslation();
+  const kindLabel = useNoteKindLabel();
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      keyboardShouldPersistTaps="always"
+      accessibilityRole="radiogroup"
+      accessibilityLabel={t('noteKinds.pickerLabel')}
+      contentContainerStyle={styles.kindRow}
+    >
+      {USER_NOTE_KINDS.map((kind) => (
+        <KindChip
+          key={kind}
+          role="radio"
+          selected={kind === value}
+          label={kindLabel(kind)}
+          icon={NOTE_KIND_ICONS[kind]}
+          iconColor={noteKindColor(kind, colors)}
+          onPress={() => onChange(kind)}
+          colors={colors}
+        />
+      ))}
+    </ScrollView>
+  );
+}
+
+/** "All" plus one chip per kind present, with counts. */
+function NoteKindFilter({
+  counts,
+  total,
+  value,
+  onChange,
+  colors,
+}: {
+  counts: Map<NoteKind, number>;
+  total: number;
+  value: NoteKind | 'all';
+  onChange: (kind: NoteKind | 'all') => void;
+  colors: Colors;
+}) {
+  const { t } = useTranslation();
+  const kindLabel = useNoteKindLabel();
+  const kinds = ([...USER_NOTE_KINDS, 'reschedule'] as NoteKind[]).filter((kind) =>
+    counts.has(kind),
+  );
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      accessibilityRole="radiogroup"
+      accessibilityLabel={t('noteKinds.filterLabel')}
+      style={styles.filterScroll}
+      contentContainerStyle={styles.kindRow}
+    >
+      <KindChip
+        role="radio"
+        selected={value === 'all'}
+        label={t('noteKinds.all')}
+        count={total}
+        onPress={() => onChange('all')}
+        colors={colors}
+      />
+      {kinds.map((kind) => (
+        <KindChip
+          key={kind}
+          role="radio"
+          selected={value === kind}
+          label={kindLabel(kind)}
+          count={counts.get(kind)}
+          icon={NOTE_KIND_ICONS[kind]}
+          iconColor={noteKindColor(kind, colors)}
+          onPress={() => onChange(kind)}
+          colors={colors}
+        />
+      ))}
+    </ScrollView>
+  );
+}
+
+function KindChip({
+  selected,
+  label,
+  count,
+  icon,
+  iconColor,
+  onPress,
+  role,
+  colors,
+}: {
+  selected: boolean;
+  label: string;
+  count?: number;
+  icon?: ComponentProps<typeof Ionicons>['name'];
+  iconColor?: string;
+  onPress: () => void;
+  role: 'radio';
+  colors: Colors;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole={role}
+      aria-checked={selected}
+      accessibilityLabel={count === undefined ? label : `${label}, ${count}`}
+      style={({ pressed }) => [
+        styles.kindChip,
+        {
+          borderColor: selected ? colors.accent : colors.border,
+          backgroundColor: selected ? colors.accentSoft : 'transparent',
+        },
+        pressed && styles.pressed,
+      ]}
+    >
+      {icon && <Ionicons name={icon} size={14} color={iconColor ?? colors.textMuted} />}
+      {/* Text stays in text colors; the icon carries the kind's color. */}
+      <Text style={[styles.kindChipText, { color: selected ? colors.accentText : colors.text }]}>
+        {label}
+      </Text>
+      {count !== undefined && (
+        <Text style={[styles.kindChipCount, { color: colors.textMuted }]}>{count}</Text>
+      )}
+    </Pressable>
+  );
+}
+
 /* ----------------------------------------------------------- NoteComposer */
 
 /**
@@ -617,7 +809,7 @@ function NoteComposer({
 }: {
   taskId: TaskId;
   colors: Colors;
-  onAdded: () => void;
+  onAdded: (kind: UserNoteKind) => void;
   editing: Note | null;
   onEditDone: () => void;
 }) {
@@ -628,6 +820,7 @@ function NoteComposer({
   const keyboardVisible = useKeyboardVisible();
   const inputRef = useRef<ComponentRef<typeof TextInput>>(null);
   const [draft, setDraft] = useState('');
+  const [kind, setKind] = useState<UserNoteKind>('comment');
   const setAsideDraft = useRef('');
 
   const editingId = editing?.id;
@@ -635,6 +828,7 @@ function NoteComposer({
     if (!editing) return;
     setAsideDraft.current = draft;
     setDraft(editing.content);
+    if (isUserNote(editing)) setKind(editing.kind as UserNoteKind);
     inputRef.current?.focus();
     // Runs only when a different note enters edit mode, reading that render's draft.
   }, [editingId]);
@@ -644,18 +838,21 @@ function NoteComposer({
   function finishEditing() {
     setDraft(setAsideDraft.current);
     setAsideDraft.current = '';
+    setKind('comment');
     onEditDone();
   }
 
   function send() {
     if (editing) {
-      editNote(taskId, editing.id, draft);
+      editNote(taskId, editing.id, draft, kind);
       finishEditing();
       return;
     }
-    if (!addNoteToTask(taskId, draft)) return;
+    if (!addNoteToTask(taskId, draft, false, kind)) return;
     setDraft('');
-    onAdded();
+    // Back to the default, so the next quick note isn't mislabeled.
+    setKind('comment');
+    onAdded(kind);
   }
 
   return (
@@ -687,6 +884,7 @@ function NoteComposer({
           </Pressable>
         </View>
       )}
+      <NoteKindPicker value={kind} onChange={setKind} colors={colors} />
       <View style={styles.composerRow}>
         <TextInput
           ref={inputRef}
@@ -828,6 +1026,19 @@ const styles = StyleSheet.create({
   },
   composerRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   editingBanner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  kindRow: { flexDirection: 'row', gap: 6, paddingEnd: 12 },
+  kindChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    height: 30,
+    paddingHorizontal: 10,
+    borderRadius: 15,
+    borderWidth: 1,
+  },
+  kindChipText: { fontSize: 13 },
+  kindChipCount: { fontSize: 12 },
+  filterScroll: { marginBottom: 12 },
   editingText: { flex: 1, fontSize: 13, fontWeight: '600' },
   composerInput: {
     flex: 1,

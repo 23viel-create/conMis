@@ -27,12 +27,18 @@ export type TaskId = string;
 /** Unique note identifier. */
 export type NoteId = string;
 
+/** Kinds a user can pick when writing a note. 'comment' is the default. */
+export const USER_NOTE_KINDS = ['comment', 'detail', 'attention', 'thought'] as const;
+export type UserNoteKind = (typeof USER_NOTE_KINDS)[number];
+
 /**
- * 'user' notes are written by the user; 'reschedule' notes are appended by
- * the app when a task is postponed. The kind lets reflection features count
- * postponements without parsing (localized) note text.
+ * User notes carry the kind the user picked; 'reschedule' notes are appended
+ * by the app when a task is postponed. The kind lets reflection features
+ * count postponements without parsing (localized) note text.
  */
-export type NoteKind = 'user' | 'reschedule';
+export type NoteKind = UserNoteKind | 'reschedule';
+
+export const isUserNote = (note: Note): boolean => note.kind !== 'reschedule';
 
 export interface Note {
   id: NoteId;
@@ -53,8 +59,14 @@ export interface Task {
   createdAt: Timestamp;
   /** null while open; set when completed. Cleared again if the task is reopened. */
   completedAt: Timestamp | null;
-  /** Day the task is planned for; null = unscheduled (shown on Today). */
+  /** Day the task is planned for now; null = unscheduled (shown on Today). */
   scheduledFor: DayKey | null;
+  /**
+   * The first day the task was committed to: the intention. Set at creation
+   * (or when an unscheduled task first gets a day) and never moved by
+   * rescheduling, so reflection can count missed intentions honestly.
+   */
+  originalScheduledFor: DayKey | null;
 }
 
 /** Input for creating a task: the store owns id, timestamps and note objects. */

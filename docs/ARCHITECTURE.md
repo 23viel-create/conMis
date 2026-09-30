@@ -13,7 +13,7 @@ src/
 │   │   ├── components/     # TaskList, TaskForm, TaskDetailScreen, NoteContent,
 │   │   │                   # SizePicker, CategoryPicker, RolloverSection
 │   │   ├── hooks/          # useVisibleTasks (tasks x timeline view), useRolloverTasks
-│   │   ├── notes/          # noteMarkdown.ts (checklists, bullets, headings, bold)
+│   │   ├── notes/          # noteMarkdown.ts, noteKinds.ts (icons, colors, labels)
 │   │   ├── rescheduling.ts # Postponement rule + reschedule note text
 │   │   ├── store/          # tasksSlice.ts (persisted), migrations.ts
 │   │   ├── selectors.ts    # Pure, memoizable derivations over tasks
@@ -25,9 +25,9 @@ src/
 │   │   ├── store/          # calendarSlice.ts (not persisted)
 │   │   └── timeline.ts     # Pure view -> date-range logic (local time, DST-safe)
 │   ├── reflection/         # Execution vs. intention dashboard
-│   │   ├── components/     # ReflectionDashboard
-│   │   ├── periods.ts      # Last 7 days / this month / all time -> DayRange
-│   │   ├── selectors.ts    # summarizeReflection (pure, one pass)
+│   │   ├── components/     # ReflectionDashboard, TrendChart (flexbox columns)
+│   │   ├── periods.ts      # This week / 7 / 30 days / month / all / by weekday
+│   │   ├── selectors.ts    # summarizeReflection, selectTrend, selectWeekdayTrend
 │   │   └── holidays.ts     # Major Jewish holidays in a range (Intl Hebrew calendar)
 │   ├── filters/            # Cross-filtering: filter state + filter UI
 │   │   ├── components/
@@ -58,7 +58,11 @@ See `src/types/task.ts`. Tasks are planned onto days with `scheduledFor`, a
 local `'YYYY-MM-DD'` day key (not a timestamp, so it never shifts across time
 zones). `null` means unscheduled; such tasks appear on Today.
 
-Each task has a notes log (`Note[]`). Notes change only through note actions
+Each task has a notes log (`Note[]`). User notes have a kind: comment
+(default), detail, attention or thought; `reschedule` notes are written by
+the app. Kind colors use categorical slots 1-3 (validated all-pairs for
+colour-blind safety); comment stays neutral, and every non-default kind is
+also labelled, so color is never the only cue. Notes change only through note actions
 (`addNoteToTask`, `toggleNotePin`, `toggleNoteChecklistItem`), never through
 `updateTask`. Moving a task to a later day via `updateTask` appends a
 `kind: 'reschedule'` note with the old date (Gregorian + Hebrew) and the
@@ -109,9 +113,14 @@ the correct direction from the next launch.
 
 `summarizeReflection(tasks, range, today)` defines the numbers:
 
-- **Execution ratio** = completed / planned, over tasks whose `scheduledFor`
-  falls in the range (ranges never include future days). Each task counts
-  once, on the day it is planned for now.
+- **Intention day** = `originalScheduledFor`: the first day a task was
+  committed to. Rescheduling moves only `scheduledFor`, so a postponed task
+  stays counted on the day it was first meant for.
+- **Execution ratio** = completed / planned, over tasks whose intention day
+  falls in the range (ranges never include future days).
+- **Trend** = per day (weekly for ranges over 45 days), tasks kept on time
+  (completed on or before the intention day) / tasks intended. The weekday
+  view averages this per day of week across all time, excluding today.
 - **Unscheduled** tasks are not in the ratio (they were never an intention
   for a day); their completions are shown separately.
 - **Today's open tasks** count as planned; the UI labels them "in progress".

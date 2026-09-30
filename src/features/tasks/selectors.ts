@@ -1,4 +1,4 @@
-import { isCompleted, type DayKey, type Note, type Task } from '../../types/task';
+import { isCompleted, isUserNote, type DayKey, type Note, type Task } from '../../types/task';
 
 /** Half-open range of calendar days: start <= day < end. */
 export interface DayRange {
@@ -55,7 +55,7 @@ export function sortNotes(notes: readonly Note[], order: NoteOrder): Note[] {
  * one-tap "move to today" doesn't replace the user's own words in the list.
  */
 export function previewNote(task: Task): Note | undefined {
-  const candidates = task.notes.filter((note) => note.isPinned || note.kind === 'user');
+  const candidates = task.notes.filter((note) => note.isPinned || isUserNote(note));
   return sortNotes(candidates, 'newest')[0];
 }
 

@@ -1,24 +1,27 @@
 import { isDayKey } from '../../../lib/dayKey';
-import type { Note, Task } from '../../../types/task';
+import { USER_NOTE_KINDS, type Note, type NoteKind, type Task } from '../../../types/task';
 
 /** Current persisted shape. Bump STORAGE_VERSION whenever it changes. */
 export interface PersistedTasks {
   tasks: Task[];
 }
 
-export const STORAGE_VERSION = 3;
+export const STORAGE_VERSION = 4;
 
-/** v1: no scheduledFor. */
-type TaskV1 = Omit<Task, 'scheduledFor' | 'notes'> & { notes: string };
+/** v1: no scheduledFor; notes a string. */
+type TaskV1 = Omit<Task, 'scheduledFor' | 'originalScheduledFor' | 'notes'> & { notes: string };
 /** v2: scheduledFor added; notes still a single string. */
-type TaskV2 = Omit<Task, 'notes'> & { notes: unknown };
+type TaskV2 = Omit<Task, 'originalScheduledFor' | 'notes'> & { notes: unknown };
+/** v3: notes log, with the single user kind 'user'. */
+type NoteV3 = Omit<Note, 'kind'> & { kind: 'user' | 'reschedule' };
+type TaskV3 = Omit<Task, 'originalScheduledFor' | 'notes'> & { notes: NoteV3[] };
 
 /**
  * v2 -> v3: the single notes string becomes a one-item notes log. Blank
  * notes become an empty log. The note id is derived from the task id so the
  * migration is deterministic and doesn't depend on crypto being available.
  */
-function notesFromV2(task: TaskV2): Note[] {
+function notesFromV2(task: TaskV2): NoteV3[] {
   if (typeof task.notes !== 'string' || task.notes.trim() === '') return [];
   return [
     {
@@ -30,6 +33,25 @@ function notesFromV2(task: TaskV2): Note[] {
     },
   ];
 }
+
+/**
+ * v3 -> v4: the intention date starts equal to the current date. For tasks
+ * already rescheduled before v4 the true first date is unknown (old
+ * reschedule notes only hold formatted text), so the current date is the
+ * best honest value. Generic 'user' notes become 'comment'.
+ */
+function toV4(task: TaskV3): Task {
+  return {
+    ...task,
+    originalScheduledFor: task.scheduledFor,
+    notes: task.notes.map((note) => ({
+      ...note,
+      kind: note.kind === 'user' ? 'comment' : note.kind,
+    })),
+  };
+}
+
+const KNOWN_KINDS: ReadonlySet<NoteKind> = new Set<NoteKind>([...USER_NOTE_KINDS, 'reschedule']);
 
 /**
  * Upgrades a saved snapshot from any older version, one step at a time.
@@ -45,13 +67,21 @@ export function migrateTasks(persisted: unknown, fromVersion: number): Persisted
   if (fromVersion < 3) {
     tasks = (tasks as TaskV2[]).map((task) => ({ ...task, notes: notesFromV2(task) }));
   }
+  if (fromVersion < 4) {
+    tasks = (tasks as TaskV3[]).map((task) =>
+      toV4({ ...task, notes: Array.isArray(task.notes) ? task.notes : [] }),
+    );
+  }
 
   // Defensive: repair fields that would break filtering or rendering.
   return {
     tasks: (tasks as Task[]).map((task) => ({
       ...task,
       scheduledFor: isDayKey(task.scheduledFor) ? task.scheduledFor : null,
-      notes: Array.isArray(task.notes) ? task.notes : [],
+      originalScheduledFor: isDayKey(task.originalScheduledFor) ? task.originalScheduledFor : null,
+      notes: (Array.isArray(task.notes) ? task.notes : []).map((note) =>
+        KNOWN_KINDS.has(note.kind) ? note : { ...note, kind: 'comment' },
+      ),
     })),
   };
 }

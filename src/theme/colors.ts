@@ -19,6 +19,12 @@ export const palette = {
     warningText: '#b45309',
     warningSoft: '#fffbeb',
     warningBorder: '#fde68a',
+    // Note kinds: categorical slots 1-3 (blue, orange, aqua), validated
+    // all-pairs for CVD; 'comment' stays neutral.
+    noteNeutral: '#cbd5e1',
+    noteDetail: '#2a78d6',
+    noteAttention: '#eb6834',
+    noteThought: '#1baf7a',
   },
   dark: {
     background: '#020617',
@@ -37,6 +43,10 @@ export const palette = {
     warningText: '#fcd34d',
     warningSoft: 'rgba(245, 158, 11, 0.12)',
     warningBorder: 'rgba(245, 158, 11, 0.35)',
+    noteNeutral: '#475569',
+    noteDetail: '#3987e5',
+    noteAttention: '#d95926',
+    noteThought: '#199e70',
   },
 };
 
