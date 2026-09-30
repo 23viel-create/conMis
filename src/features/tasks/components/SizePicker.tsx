@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { TASK_SIZES, type TaskSize } from '../../../types/task';
 import { useColors } from '../../../theme/colors';
-import { SIZE_LABELS } from '../taskMeta';
+import { useTaskLabels } from '../taskMeta';
 
 interface SizePickerProps {
   value: TaskSize;
@@ -12,6 +12,7 @@ interface SizePickerProps {
 /** S / M / L segmented control. */
 export function SizePicker({ value, onChange, accessibilityLabel = 'Size' }: SizePickerProps) {
   const colors = useColors();
+  const labels = useTaskLabels();
   return (
     <View
       accessibilityRole="radiogroup"
@@ -25,7 +26,7 @@ export function SizePicker({ value, onChange, accessibilityLabel = 'Size' }: Siz
             key={size}
             onPress={() => onChange(size)}
             accessibilityRole="radio"
-            accessibilityLabel={SIZE_LABELS[size].full}
+            accessibilityLabel={labels.size(size).full}
             aria-checked={selected}
             hitSlop={4}
             style={({ pressed }) => [
@@ -37,7 +38,7 @@ export function SizePicker({ value, onChange, accessibilityLabel = 'Size' }: Siz
             <Text
               style={[styles.segmentText, { color: selected ? colors.accentText : colors.textMuted }]}
             >
-              {SIZE_LABELS[size].short}
+              {labels.size(size).short}
             </Text>
           </Pressable>
         );

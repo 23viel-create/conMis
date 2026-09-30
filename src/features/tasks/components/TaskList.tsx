@@ -12,7 +12,7 @@ import { useVisibleTasks } from '../hooks/useVisibleTasks';
 import { notePreviewText } from '../notes/noteMarkdown';
 import { effectiveDay, previewNote } from '../selectors';
 import { useTasksStore } from '../store/tasksSlice';
-import { CATEGORY_OPTIONS, SIZE_LABELS } from '../taskMeta';
+import { CATEGORY_ICONS, useTaskLabels } from '../taskMeta';
 
 interface TaskListProps {
   /** Rendered above the tasks and scrolls with them (e.g. the quick-add form). */
@@ -105,7 +105,9 @@ const TaskRow = memo(function TaskRow({
 }: TaskRowProps) {
   const { t } = useTranslation();
   const done = isCompleted(task);
-  const category = CATEGORY_OPTIONS[task.category];
+  const labels = useTaskLabels();
+  const size = labels.size(task.size);
+  const categoryLabel = labels.category(task.category);
   const note = previewNote(task);
   const notesPreview = note ? notePreviewText(note.content) : '';
 
@@ -159,15 +161,15 @@ const TaskRow = memo(function TaskRow({
           )}
           <View
             style={[styles.sizeBadge, { backgroundColor: colors.field }]}
-            accessibilityLabel={`Size: ${SIZE_LABELS[task.size].full}`}
+            accessibilityLabel={`${t('taskDetail.size')}: ${size.full}`}
           >
             <Text style={[styles.sizeText, { color: colors.textMuted }]}>
-              {SIZE_LABELS[task.size].short}
+              {size.short}
             </Text>
           </View>
-          <View style={styles.category} accessibilityLabel={`Category: ${category.label}`}>
-            <Ionicons name={category.icon} size={14} color={colors.textMuted} />
-            <Text style={[styles.metaText, { color: colors.textMuted }]}>{category.label}</Text>
+          <View style={styles.category} accessibilityLabel={`${t('taskDetail.category')}: ${categoryLabel}`}>
+            <Ionicons name={CATEGORY_ICONS[task.category]} size={14} color={colors.textMuted} />
+            <Text style={[styles.metaText, { color: colors.textMuted }]}>{categoryLabel}</Text>
           </View>
         </View>
 

@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { TASK_CATEGORIES, type TaskCategory } from '../../../types/task';
 import { useColors } from '../../../theme/colors';
-import { CATEGORY_OPTIONS } from '../taskMeta';
+import { CATEGORY_ICONS, useTaskLabels } from '../taskMeta';
 
 interface CategoryPickerProps {
   value: TaskCategory;
@@ -17,11 +17,13 @@ export function CategoryPicker({
   accessibilityLabel = 'Category',
 }: CategoryPickerProps) {
   const colors = useColors();
+  const labels = useTaskLabels();
   return (
     <View accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel} style={styles.chips}>
       {TASK_CATEGORIES.map((category) => {
         const selected = category === value;
-        const { label, icon } = CATEGORY_OPTIONS[category];
+        const label = labels.category(category);
+        const icon = CATEGORY_ICONS[category];
         const tint = selected ? colors.accentText : colors.textMuted;
         return (
           <Pressable

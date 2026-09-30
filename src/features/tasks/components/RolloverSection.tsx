@@ -17,7 +17,7 @@ import { useColors, type Colors } from '../../../theme/colors';
 import { useTodayKey } from '../../calendar';
 import { useRolloverTasks } from '../hooks/useRolloverTasks';
 import { useTasksStore } from '../store/tasksSlice';
-import { CATEGORY_OPTIONS } from '../taskMeta';
+import { CATEGORY_ICONS } from '../taskMeta';
 
 /**
  * The rollover inbox: open tasks from earlier days, shown at the top of
@@ -115,7 +115,6 @@ function RolloverRow({
   onMoveToToday: () => void;
 }) {
   const { t, i18n } = useTranslation();
-  const category = CATEGORY_OPTIONS[task.category];
   // selectRolloverTasks only returns scheduled tasks.
   const planned = formatDay(task.scheduledFor as string, i18n.language);
 
@@ -130,7 +129,7 @@ function RolloverRow({
           {task.title}
         </Text>
         <View style={styles.rowMeta}>
-          <Ionicons name={category.icon} size={13} color={colors.textMuted} />
+          <Ionicons name={CATEGORY_ICONS[task.category]} size={13} color={colors.textMuted} />
           <Text style={[styles.rowMetaText, { color: colors.textMuted }]}>
             {t('rollover.plannedFor', { date: planned })}
           </Text>

@@ -6,8 +6,8 @@ Platform: React Native (Expo SDK 57, Expo Router), TypeScript.
 
 ```
 src/
-├── app/                    # Expo Router routes: _layout.tsx (shell), index.tsx (home),
-│                           # task/[id].tsx (task detail)
+├── app/                    # Expo Router: _layout.tsx (root stack), (tabs)/ with
+│                           # index.tsx (tasks) + reflection.tsx, task/[id].tsx (detail)
 ├── features/               # Vertical slices; each owns its UI, hooks and state
 │   ├── tasks/
 │   │   ├── components/     # TaskList, TaskForm, TaskDetailScreen, NoteContent,
@@ -24,13 +24,15 @@ src/
 │   │   ├── hooks/          # useTodayKey (rolls over at midnight / on resume)
 │   │   ├── store/          # calendarSlice.ts (not persisted)
 │   │   └── timeline.ts     # Pure view -> date-range logic (local time, DST-safe)
+│   ├── reflection/         # Execution vs. intention dashboard
+│   │   ├── components/     # ReflectionDashboard
+│   │   ├── periods.ts      # Last 7 days / this month / all time -> DayRange
+│   │   ├── selectors.ts    # summarizeReflection (pure, one pass)
+│   │   └── holidays.ts     # Major Jewish holidays in a range (Intl Hebrew calendar)
 │   ├── filters/            # Cross-filtering: filter state + filter UI
 │   │   ├── components/
 │   │   ├── store/          # filtersSlice.ts
 │   │   └── selectors.ts    # applyFilters(tasks, filters)
-│   └── reflection/         # History, stats, self-reflection views
-│       ├── components/
-│       └── selectors.ts    # completion streaks, per-category/size stats
 ├── components/
 │   └── ui/                 # Feature-agnostic primitives: ActionSheet (long-press menus)
 ├── store/
@@ -102,3 +104,17 @@ The language is detected from the device (first supported of he/en, else he).
 RTL is enabled via the expo-localization plugin (`supportsRTL`); if the app
 language and the device's direction disagree, `I18nManager.forceRTL` applies
 the correct direction from the next launch.
+
+## Reflection metrics
+
+`summarizeReflection(tasks, range, today)` defines the numbers:
+
+- **Execution ratio** = completed / planned, over tasks whose `scheduledFor`
+  falls in the range (ranges never include future days). Each task counts
+  once, on the day it is planned for now.
+- **Unscheduled** tasks are not in the ratio (they were never an intention
+  for a day); their completions are shown separately.
+- **Today's open tasks** count as planned; the UI labels them "in progress".
+- **Postponements** = reschedule notes written inside the range, so moving a
+  task out of the range can't hide that it was postponed.
+- Size and category breakdowns use the same planned/completed definition.

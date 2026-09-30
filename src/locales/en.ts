@@ -1,6 +1,56 @@
 import type { TranslationResources } from './he';
 
 const en: TranslationResources = {
+  size: {
+    short: { small: 'S', medium: 'M', large: 'L' },
+    full: { small: 'Small', medium: 'Medium', large: 'Large' },
+  },
+  category: {
+    home: 'Home',
+    work: 'Work',
+    personal: 'Personal',
+    uncategorized: 'None',
+  },
+  tabs: {
+    tasks: 'Tasks',
+    reflection: 'Reflection',
+  },
+  reflection: {
+    title: 'Reflection',
+    periodLabel: 'Period',
+    periods: {
+      week: 'Last 7 days',
+      month: 'This month',
+      all: 'All time',
+    },
+    executionTitle: 'Execution vs. intention',
+    executionDetail: '{{completed}} of {{planned}} planned tasks done',
+    onPlannedDay: '{{n}} done on the planned day',
+    openToday: '{{n}} still open today (in progress, not missed)',
+    noPlanned: 'No tasks were planned for a specific day in this period yet.',
+    postponementsLabel: 'Postponements',
+    postponementsDetail: 'across {{n}} tasks',
+    unscheduledLabel: 'Done without a date',
+    unscheduledDetail: 'not part of the ratio',
+    insightPostponed: 'You postponed tasks {{events}} times. The reasons you gave are in each task’s notes.',
+    insightNoPostponed: 'Nothing was postponed in this period.',
+    bySize: 'By size',
+    byCategory: 'By category',
+    rowLabel: '{{label}}: {{completed}} of {{planned}} done',
+    rowEmpty: '{{label}}: nothing planned',
+    holidaysTitle: 'Holidays in this period',
+    holidaysHint: 'Holidays change the rhythm of a day. Worth keeping in mind when reading these numbers.',
+  },
+  holidays: {
+    roshHashanah: 'Rosh Hashanah',
+    yomKippur: 'Yom Kippur',
+    sukkot: 'Sukkot',
+    sheminiAtzeret: 'Shemini Atzeret / Simchat Torah',
+    chanukah: 'Chanukah',
+    purim: 'Purim',
+    pesach: 'Pesach',
+    shavuot: 'Shavuot',
+  },
   actions: {
     cancel: 'Cancel',
     longPressHint: 'Long-press for more options',

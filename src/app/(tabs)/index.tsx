@@ -1,11 +1,11 @@
 import { KeyboardAvoidingView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { TimelineNav, useCalendarStore } from '../features/calendar';
-import { RolloverSection } from '../features/tasks/components/RolloverSection';
-import { TaskForm } from '../features/tasks/components/TaskForm';
-import { TaskList } from '../features/tasks/components/TaskList';
-import { useTasksHydrated } from '../features/tasks/store/tasksSlice';
-import { useColors } from '../theme/colors';
+import { TimelineNav, useCalendarStore } from '../../features/calendar';
+import { RolloverSection } from '../../features/tasks/components/RolloverSection';
+import { TaskForm } from '../../features/tasks/components/TaskForm';
+import { TaskList } from '../../features/tasks/components/TaskList';
+import { useTasksHydrated } from '../../features/tasks/store/tasksSlice';
+import { useColors } from '../../theme/colors';
 
 export default function HomeScreen() {
   const colors = useColors();
