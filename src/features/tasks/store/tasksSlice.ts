@@ -42,6 +42,14 @@ export interface TasksSlice {
   toggleNotePin: (taskId: TaskId, noteId: NoteId) => void;
   /** Checks or unchecks one '- [ ]' line inside a note. */
   toggleNoteChecklistItem: (taskId: TaskId, noteId: NoteId, lineIndex: number) => void;
+  /** Removes a task and its whole notes log. */
+  deleteTask: (id: TaskId) => void;
+  /**
+   * Replaces a user note's text. Blank content is ignored (delete instead).
+   * Reschedule notes are a factual record and can't be edited.
+   */
+  editNote: (taskId: TaskId, noteId: NoteId, newContent: string) => void;
+  deleteNote: (taskId: TaskId, noteId: NoteId) => void;
 }
 
 // On native, crypto.randomUUID is provided by src/lib/polyfills.ts (expo-crypto).
@@ -151,6 +159,29 @@ export const createTasksSlice: StateCreator<TasksSlice, [['zustand/persist', unk
           content: toggleChecklistLine(note.content, lineIndex),
         })),
       ),
+    }));
+  },
+
+  deleteTask: (id) => {
+    set((state) => ({ tasks: state.tasks.filter((task) => task.id !== id) }));
+  },
+
+  editNote: (taskId, noteId, newContent) => {
+    const content = newContent.trim();
+    if (!content) return;
+    set((state) => ({
+      tasks: mapTask(state.tasks, taskId, (task) =>
+        mapNote(task, noteId, (note) => (note.kind === 'user' ? { ...note, content } : note)),
+      ),
+    }));
+  },
+
+  deleteNote: (taskId, noteId) => {
+    set((state) => ({
+      tasks: mapTask(state.tasks, taskId, (task) => ({
+        ...task,
+        notes: task.notes.filter((note) => note.id !== noteId),
+      })),
     }));
   },
 });

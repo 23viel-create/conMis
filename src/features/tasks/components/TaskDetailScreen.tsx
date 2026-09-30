@@ -1,4 +1,13 @@
-import { memo, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentRef,
+  type ReactNode,
+} from 'react';
 import {
   FlatList,
   I18nManager,
@@ -15,6 +24,7 @@ import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import { ActionSheet } from '../../../components/ui/ActionSheet';
 import { addDaysToKey } from '../../../lib/dayKey';
 import { formatDay, formatHebrewDay } from '../../../lib/dateFormat';
 import type { DayKey, Note, NoteId, Task, TaskId } from '../../../types/task';
@@ -43,10 +53,15 @@ export function TaskDetailScreen({ taskId }: TaskDetailScreenProps) {
   const task = useTasksStore((state) => state.tasks.find((t) => t.id === taskId));
   const toggleNotePin = useTasksStore((state) => state.toggleNotePin);
   const toggleChecklistItem = useTasksStore((state) => state.toggleNoteChecklistItem);
+  const deleteNote = useTasksStore((state) => state.deleteNote);
   const colors = useColors();
   const { t } = useTranslation();
 
   const [order, setOrder] = useState<NoteOrder>('newest');
+  // Long-press menu target, and the note loaded into the composer for editing.
+  const [menuNote, setMenuNote] = useState<Note | null>(null);
+  const [editingNote, setEditingNote] = useState<Note | null>(null);
+  const openNoteMenu = useCallback((note: Note) => setMenuNote(note), []);
   const listRef = useRef<FlatList<Note>>(null);
 
   const notes = useMemo(() => sortNotes(task?.notes ?? [], order), [task?.notes, order]);
@@ -76,7 +91,9 @@ export function TaskDetailScreen({ taskId }: TaskDetailScreenProps) {
       <Header title={t('taskDetail.heading')} onBack={goBack} colors={colors} />
 
       {!task ? (
-        <Text style={[styles.notFound, { color: colors.textMuted }]}>{t('taskDetail.notFound')}</Text>
+        <Text style={[styles.notFound, { color: colors.textMuted }]}>
+          {t('taskDetail.notFound')}
+        </Text>
       ) : (
         // 'padding' on both platforms: with Android edge-to-edge the window no
         // longer resizes for the keyboard, so we have to make room ourselves.
@@ -92,6 +109,9 @@ export function TaskDetailScreen({ taskId }: TaskDetailScreenProps) {
                 colors={colors}
                 onTogglePin={toggleNotePin}
                 onToggleItem={toggleChecklistItem}
+                // Reschedule notes are a factual record: no edit/delete menu.
+                onLongPress={item.kind === 'user' ? openNoteMenu : undefined}
+                isEditing={item.id === editingNote?.id}
               />
             )}
             ListHeaderComponent={
@@ -106,7 +126,9 @@ export function TaskDetailScreen({ taskId }: TaskDetailScreenProps) {
               </>
             }
             ListEmptyComponent={
-              <Text style={[styles.emptyNotes, { color: colors.textMuted }]}>{t('notes.empty')}</Text>
+              <Text style={[styles.emptyNotes, { color: colors.textMuted }]}>
+                {t('notes.empty')}
+              </Text>
             }
             ItemSeparatorComponent={NoteSeparator}
             contentContainerStyle={styles.listContent}
@@ -114,7 +136,38 @@ export function TaskDetailScreen({ taskId }: TaskDetailScreenProps) {
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
             onScrollToIndexFailed={() => listRef.current?.scrollToEnd({ animated: true })}
           />
-          <NoteComposer taskId={task.id} colors={colors} onAdded={revealNewNote} />
+          <NoteComposer
+            taskId={task.id}
+            colors={colors}
+            onAdded={revealNewNote}
+            editing={editingNote}
+            onEditDone={() => setEditingNote(null)}
+          />
+          <ActionSheet
+            visible={menuNote !== null}
+            cancelLabel={t('actions.cancel')}
+            onClose={() => setMenuNote(null)}
+            actions={
+              menuNote
+                ? [
+                    {
+                      label: t('noteActions.edit'),
+                      icon: 'create-outline',
+                      onPress: () => setEditingNote(menuNote),
+                    },
+                    {
+                      label: t('noteActions.delete'),
+                      icon: 'trash-outline',
+                      destructive: true,
+                      onPress: () => {
+                        if (editingNote?.id === menuNote.id) setEditingNote(null);
+                        deleteNote(task.id, menuNote.id);
+                      },
+                    },
+                  ]
+                : []
+            }
+          />
         </KeyboardAvoidingView>
       )}
     </SafeAreaView>
@@ -318,7 +371,9 @@ function DateEditor({ task, colors }: { task: Task; colors: Colors }) {
                 pressed && styles.pressed,
               ]}
             >
-              <Text style={{ color: selected ? colors.accentText : colors.textMuted }}>{label}</Text>
+              <Text style={{ color: selected ? colors.accentText : colors.textMuted }}>
+                {label}
+              </Text>
             </Pressable>
           );
         })}
@@ -352,7 +407,9 @@ function DateEditor({ task, colors }: { task: Task; colors: Colors }) {
               accessibilityRole="button"
               style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
             >
-              <Text style={{ color: colors.textMuted, fontWeight: '600' }}>{t('taskDetail.cancel')}</Text>
+              <Text style={{ color: colors.textMuted, fontWeight: '600' }}>
+                {t('taskDetail.cancel')}
+              </Text>
             </Pressable>
             <Pressable
               onPress={confirm}
@@ -456,6 +513,9 @@ interface NoteCardProps {
   colors: Colors;
   onTogglePin: (taskId: TaskId, noteId: NoteId) => void;
   onToggleItem: (taskId: TaskId, noteId: NoteId, lineIndex: number) => void;
+  /** Omitted for notes that can't be edited or deleted. */
+  onLongPress?: (note: Note) => void;
+  isEditing: boolean;
 }
 
 const NoteCard = memo(function NoteCard({
@@ -464,6 +524,8 @@ const NoteCard = memo(function NoteCard({
   colors,
   onTogglePin,
   onToggleItem,
+  onLongPress,
+  isEditing,
 }: NoteCardProps) {
   const { t, i18n } = useTranslation();
   const isSystem = note.kind === 'reschedule';
@@ -479,13 +541,22 @@ const NoteCard = memo(function NoteCard({
   );
 
   return (
-    <View
-      style={[
+    <Pressable
+      onLongPress={onLongPress ? () => onLongPress(note) : undefined}
+      disabled={!onLongPress}
+      accessibilityHint={onLongPress ? t('actions.longPressHint') : undefined}
+      accessibilityActions={onLongPress ? [{ name: 'longpress' }] : undefined}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === 'longpress') onLongPress?.(note);
+      }}
+      style={({ pressed }) => [
         styles.noteCard,
         {
           backgroundColor: isSystem ? colors.field : colors.card,
-          borderColor: note.isPinned ? colors.accent : colors.border,
+          borderColor: isEditing || note.isPinned ? colors.accent : colors.border,
         },
+        isEditing && styles.noteCardEditing,
+        pressed && styles.pressed,
       ]}
     >
       {isSystem && (
@@ -522,7 +593,7 @@ const NoteCard = memo(function NoteCard({
           />
         </Pressable>
       </View>
-    </View>
+    </Pressable>
   );
 });
 
@@ -532,25 +603,56 @@ function NoteSeparator() {
 
 /* ----------------------------------------------------------- NoteComposer */
 
+/**
+ * Bottom input for new notes. In edit mode (a note chosen from the long-press
+ * menu) it loads that note's text and saves over it; any unsent new-note
+ * draft is set aside and restored afterwards.
+ */
 function NoteComposer({
   taskId,
   colors,
   onAdded,
+  editing,
+  onEditDone,
 }: {
   taskId: TaskId;
   colors: Colors;
   onAdded: () => void;
+  editing: Note | null;
+  onEditDone: () => void;
 }) {
   const addNoteToTask = useTasksStore((state) => state.addNoteToTask);
+  const editNote = useTasksStore((state) => state.editNote);
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const keyboardVisible = useKeyboardVisible();
   const inputRef = useRef<ComponentRef<typeof TextInput>>(null);
   const [draft, setDraft] = useState('');
+  const setAsideDraft = useRef('');
+
+  const editingId = editing?.id;
+  useEffect(() => {
+    if (!editing) return;
+    setAsideDraft.current = draft;
+    setDraft(editing.content);
+    inputRef.current?.focus();
+    // Runs only when a different note enters edit mode, reading that render's draft.
+  }, [editingId]);
 
   const canSend = draft.trim().length > 0;
 
+  function finishEditing() {
+    setDraft(setAsideDraft.current);
+    setAsideDraft.current = '';
+    onEditDone();
+  }
+
   function send() {
+    if (editing) {
+      editNote(taskId, editing.id, draft);
+      finishEditing();
+      return;
+    }
     if (!addNoteToTask(taskId, draft)) return;
     setDraft('');
     onAdded();
@@ -568,33 +670,52 @@ function NoteComposer({
         },
       ]}
     >
-      <TextInput
-        ref={inputRef}
-        value={draft}
-        onChangeText={setDraft}
-        placeholder={t('notes.placeholder')}
-        placeholderTextColor={colors.placeholder}
-        accessibilityLabel={t('notes.add')}
-        multiline
-        textAlignVertical="top"
-        style={[
-          styles.composerInput,
-          { color: colors.text, backgroundColor: colors.field, borderColor: colors.border },
-        ]}
-      />
-      <Pressable
-        onPress={send}
-        disabled={!canSend}
-        accessibilityRole="button"
-        accessibilityLabel={t('notes.add')}
-        aria-disabled={!canSend}
-        style={({ pressed }) => [
-          styles.sendButton,
-          { backgroundColor: colors.accent, opacity: !canSend ? 0.4 : pressed ? 0.8 : 1 },
-        ]}
-      >
-        <Ionicons name="arrow-up" size={22} color={colors.onAccent} />
-      </Pressable>
+      {editing && (
+        <View style={styles.editingBanner}>
+          <Ionicons name="create-outline" size={16} color={colors.accentText} />
+          <Text style={[styles.editingText, { color: colors.accentText }]}>
+            {t('noteActions.editing')}
+          </Text>
+          <Pressable
+            onPress={finishEditing}
+            accessibilityRole="button"
+            accessibilityLabel={t('noteActions.cancelEdit')}
+            hitSlop={10}
+            style={({ pressed }) => [styles.iconButtonSmall, pressed && styles.pressed]}
+          >
+            <Ionicons name="close" size={18} color={colors.textMuted} />
+          </Pressable>
+        </View>
+      )}
+      <View style={styles.composerRow}>
+        <TextInput
+          ref={inputRef}
+          value={draft}
+          onChangeText={setDraft}
+          placeholder={t('notes.placeholder')}
+          placeholderTextColor={colors.placeholder}
+          accessibilityLabel={editing ? t('noteActions.editing') : t('notes.add')}
+          multiline
+          textAlignVertical="top"
+          style={[
+            styles.composerInput,
+            { color: colors.text, backgroundColor: colors.field, borderColor: colors.border },
+          ]}
+        />
+        <Pressable
+          onPress={send}
+          disabled={!canSend}
+          accessibilityRole="button"
+          accessibilityLabel={editing ? t('noteActions.save') : t('notes.add')}
+          aria-disabled={!canSend}
+          style={({ pressed }) => [
+            styles.sendButton,
+            { backgroundColor: colors.accent, opacity: !canSend ? 0.4 : pressed ? 0.8 : 1 },
+          ]}
+        >
+          <Ionicons name={editing ? 'checkmark' : 'arrow-up'} size={22} color={colors.onAccent} />
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -698,14 +819,16 @@ const styles = StyleSheet.create({
   noteFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   noteTime: { fontSize: 12 },
 
+  noteCardEditing: { borderWidth: 2 },
   composer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
+    gap: 6,
     paddingHorizontal: 12,
     paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
+  composerRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+  editingBanner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  editingText: { flex: 1, fontSize: 13, fontWeight: '600' },
   composerInput: {
     flex: 1,
     minHeight: 44,

@@ -1,6 +1,31 @@
 import type { TranslationResources } from './he';
 
 const en: TranslationResources = {
+  actions: {
+    cancel: 'Cancel',
+    longPressHint: 'Long-press for more options',
+  },
+  taskActions: {
+    delete: 'Delete task',
+    deleteMessage: "This removes the task and all its notes. It can't be undone.",
+  },
+  noteActions: {
+    edit: 'Edit note',
+    delete: 'Delete note',
+    editing: 'Editing note',
+    save: 'Save note',
+    cancelEdit: 'Cancel editing',
+  },
+  rollover: {
+    title: 'Still open from earlier',
+    hint: 'Move to today, open a task to pick a date, or leave it here.',
+    moveToToday: 'Today',
+    moveToTodayLabel: 'Move {{title}} to today',
+    moveAll: 'All to today',
+    plannedFor: 'Planned for {{date}}',
+    expand: 'Show overdue tasks',
+    collapse: 'Hide overdue tasks',
+  },
   notes: {
     title: 'Notes',
     empty: 'No notes yet. Write plans, [ ] checklists or thoughts below.',

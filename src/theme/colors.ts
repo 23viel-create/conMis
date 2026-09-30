@@ -16,6 +16,9 @@ export const palette = {
     accentSoft: '#eef2ff',
     segmentActive: '#ffffff',
     onAccent: '#ffffff',
+    warningText: '#b45309',
+    warningSoft: '#fffbeb',
+    warningBorder: '#fde68a',
   },
   dark: {
     background: '#020617',
@@ -31,6 +34,9 @@ export const palette = {
     accentSoft: 'rgba(99, 102, 241, 0.15)',
     segmentActive: '#334155',
     onAccent: '#ffffff',
+    warningText: '#fcd34d',
+    warningSoft: 'rgba(245, 158, 11, 0.12)',
+    warningBorder: 'rgba(245, 158, 11, 0.35)',
   },
 };
 

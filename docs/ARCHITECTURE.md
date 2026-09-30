@@ -11,8 +11,8 @@ src/
 ├── features/               # Vertical slices; each owns its UI, hooks and state
 │   ├── tasks/
 │   │   ├── components/     # TaskList, TaskForm, TaskDetailScreen, NoteContent,
-│   │   │                   # SizePicker, CategoryPicker
-│   │   ├── hooks/          # useVisibleTasks (tasks x active timeline view)
+│   │   │                   # SizePicker, CategoryPicker, RolloverSection
+│   │   ├── hooks/          # useVisibleTasks (tasks x timeline view), useRolloverTasks
 │   │   ├── notes/          # noteMarkdown.ts (checklists, bullets, headings, bold)
 │   │   ├── rescheduling.ts # Postponement rule + reschedule note text
 │   │   ├── store/          # tasksSlice.ts (persisted), migrations.ts
@@ -32,7 +32,7 @@ src/
 │       ├── components/
 │       └── selectors.ts    # completion streaks, per-category/size stats
 ├── components/
-│   └── ui/                 # Feature-agnostic primitives: Button, Chip, Sheet
+│   └── ui/                 # Feature-agnostic primitives: ActionSheet (long-press menus)
 ├── store/
 │   ├── index.ts            # Root store composing feature slices + persist
 │   └── migrations.ts       # Versioned migrations for persisted state
@@ -60,7 +60,13 @@ Each task has a notes log (`Note[]`). Notes change only through note actions
 (`addNoteToTask`, `toggleNotePin`, `toggleNoteChecklistItem`), never through
 `updateTask`. Moving a task to a later day via `updateTask` appends a
 `kind: 'reschedule'` note with the old date (Gregorian + Hebrew) and the
-reason, so postponements can be counted without parsing text.
+reason, so postponements can be counted without parsing text. Reschedule
+notes are a factual record: `editNote` ignores them and the UI offers no
+edit/delete menu for them.
+
+The rollover inbox (`selectRolloverTasks`) is every open task scheduled
+before today, oldest first. It is shown at the top of the Today view; moving
+a task to today goes through `updateTask`, so it gets a reschedule note.
 
 Persisted data is versioned (`STORAGE_VERSION` in
 `features/tasks/store/migrations.ts`). Any change to the saved shape bumps

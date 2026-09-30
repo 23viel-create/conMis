@@ -1,4 +1,4 @@
-import type { DayKey, Note, Task } from '../../types/task';
+import { isCompleted, type DayKey, type Note, type Task } from '../../types/task';
 
 /** Half-open range of calendar days: start <= day < end. */
 export interface DayRange {
@@ -49,7 +49,28 @@ export function sortNotes(notes: readonly Note[], order: NoteOrder): Note[] {
   ];
 }
 
-/** Note shown under the title in lists: newest pinned note, else newest note. */
+/**
+ * Note shown under the title in lists: newest pinned note, else the newest
+ * user note. Automatic reschedule notes are skipped unless pinned, so a
+ * one-tap "move to today" doesn't replace the user's own words in the list.
+ */
 export function previewNote(task: Task): Note | undefined {
-  return sortNotes(task.notes, 'newest')[0];
+  const candidates = task.notes.filter((note) => note.isPinned || note.kind === 'user');
+  return sortNotes(candidates, 'newest')[0];
+}
+
+/**
+ * Open tasks planned for a day before `today`: the rollover inbox. Oldest
+ * first, so the longest-waiting task is decided on first. Unscheduled tasks
+ * are never overdue (they already live on today).
+ */
+export function selectRolloverTasks(tasks: readonly Task[], today: DayKey): Task[] {
+  return tasks
+    .filter((task) => !isCompleted(task) && task.scheduledFor !== null && task.scheduledFor < today)
+    .sort((a, b) => {
+      const dayA = a.scheduledFor as DayKey;
+      const dayB = b.scheduledFor as DayKey;
+      if (dayA !== dayB) return dayA < dayB ? -1 : 1;
+      return a.createdAt - b.createdAt;
+    });
 }

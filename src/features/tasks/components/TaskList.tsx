@@ -1,8 +1,9 @@
-import { memo, useMemo, type ReactElement } from 'react';
+import { memo, useCallback, useMemo, useState, type ReactElement } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import { ActionSheet } from '../../../components/ui/ActionSheet';
 import { dayKeyToDate } from '../../../lib/dayKey';
 import { isCompleted, type Task, type TaskId } from '../../../types/task';
 import { useColors, type Colors } from '../../../theme/colors';
@@ -22,8 +23,13 @@ interface TaskListProps {
 export function TaskList({ header }: TaskListProps) {
   const { tasks, view, today } = useVisibleTasks();
   const toggleComplete = useTasksStore((state) => state.toggleComplete);
+  const deleteTask = useTasksStore((state) => state.deleteTask);
   const colors = useColors();
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
+
+  // One sheet for the whole list; rows get a stable callback so memo holds.
+  const [menuTask, setMenuTask] = useState<Task | null>(null);
+  const openMenu = useCallback((task: Task) => setMenuTask(task), []);
 
   // In the week view each row names its day ("Thu"); single-day views don't need it.
   const weekdayFormat = useMemo(
@@ -32,28 +38,50 @@ export function TaskList({ header }: TaskListProps) {
   );
 
   return (
-    <FlatList
-      data={tasks}
-      keyExtractor={(task) => task.id}
-      renderItem={({ item }) => (
-        <TaskRow
-          task={item}
-          colors={colors}
-          onToggle={toggleComplete}
-          dayLabel={
-            view === 'week'
-              ? weekdayFormat.format(dayKeyToDate(effectiveDay(item, today)))
-              : undefined
-          }
-        />
-      )}
-      ListHeaderComponent={header}
-      ListEmptyComponent={<EmptyState colors={colors} view={view} />}
-      ItemSeparatorComponent={Separator}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-      keyboardDismissMode="on-drag"
-    />
+    <>
+      <FlatList
+        data={tasks}
+        keyExtractor={(task) => task.id}
+        renderItem={({ item }) => (
+          <TaskRow
+            task={item}
+            colors={colors}
+            onToggle={toggleComplete}
+            onLongPress={openMenu}
+            dayLabel={
+              view === 'week'
+                ? weekdayFormat.format(dayKeyToDate(effectiveDay(item, today)))
+                : undefined
+            }
+          />
+        )}
+        ListHeaderComponent={header}
+        ListEmptyComponent={<EmptyState colors={colors} view={view} />}
+        ItemSeparatorComponent={Separator}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      />
+      <ActionSheet
+        visible={menuTask !== null}
+        title={menuTask?.title}
+        message={t('taskActions.deleteMessage')}
+        cancelLabel={t('actions.cancel')}
+        onClose={() => setMenuTask(null)}
+        actions={
+          menuTask
+            ? [
+                {
+                  label: t('taskActions.delete'),
+                  icon: 'trash-outline',
+                  destructive: true,
+                  onPress: () => deleteTask(menuTask.id),
+                },
+              ]
+            : []
+        }
+      />
+    </>
   );
 }
 
@@ -61,13 +89,21 @@ interface TaskRowProps {
   task: Task;
   colors: Colors;
   onToggle: (id: TaskId) => void;
+  onLongPress: (task: Task) => void;
   /** Weekday shown in the meta row, e.g. in the week view. */
   dayLabel?: string;
 }
 
 // Memoized: toggling one task only re-renders that row, because the store
 // keeps the identity of untouched task objects.
-const TaskRow = memo(function TaskRow({ task, colors, onToggle, dayLabel }: TaskRowProps) {
+const TaskRow = memo(function TaskRow({
+  task,
+  colors,
+  onToggle,
+  onLongPress,
+  dayLabel,
+}: TaskRowProps) {
+  const { t } = useTranslation();
   const done = isCompleted(task);
   const category = CATEGORY_OPTIONS[task.category];
   const note = previewNote(task);
@@ -98,8 +134,13 @@ const TaskRow = memo(function TaskRow({ task, colors, onToggle, dayLabel }: Task
 
       <Pressable
         onPress={() => router.push({ pathname: '/task/[id]', params: { id: task.id } })}
+        onLongPress={() => onLongPress(task)}
         accessibilityRole="button"
-        accessibilityHint="Opens the task to edit it and see its notes"
+        accessibilityHint={t('actions.longPressHint')}
+        accessibilityActions={[{ name: 'longpress' }]}
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === 'longpress') onLongPress(task);
+        }}
         style={({ pressed }) => [styles.body, pressed && styles.pressed]}
       >
         <Text

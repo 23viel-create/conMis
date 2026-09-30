@@ -1,5 +1,30 @@
 // Hebrew is the base language: its shape defines the keys every locale must provide.
 const he = {
+  actions: {
+    cancel: 'ביטול',
+    longPressHint: 'לחיצה ארוכה לאפשרויות נוספות',
+  },
+  taskActions: {
+    delete: 'מחיקת המשימה',
+    deleteMessage: 'המשימה וכל ההערות שלה יימחקו. אי אפשר לבטל את הפעולה.',
+  },
+  noteActions: {
+    edit: 'עריכת ההערה',
+    delete: 'מחיקת ההערה',
+    editing: 'עריכת הערה',
+    save: 'שמירת ההערה',
+    cancelEdit: 'ביטול עריכה',
+  },
+  rollover: {
+    title: 'ממתינות מימים קודמים',
+    hint: 'אפשר להעביר להיום, לפתוח משימה כדי לבחור תאריך, או להשאיר כאן.',
+    moveToToday: 'להיום',
+    moveToTodayLabel: 'העברת {{title}} להיום',
+    moveAll: 'הכול להיום',
+    plannedFor: 'תוכננה ל־{{date}}',
+    expand: 'הצגת משימות ממתינות',
+    collapse: 'הסתרת משימות ממתינות',
+  },
   notes: {
     title: 'הערות',
     empty: 'עדיין אין הערות. אפשר לכתוב תוכניות, רשימות [ ] או מחשבות למטה.',
