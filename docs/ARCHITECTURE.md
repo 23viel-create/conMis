@@ -1,12 +1,12 @@
-# Architecture (Phase 1)
+# Architecture
+
+Platform: React Native (Expo), TypeScript.
 
 ## Folder structure
 
 ```
 src/
-├── app/                    # App shell: providers, routing, root layout
-│   ├── App.tsx
-│   └── main.tsx
+├── app/                    # App shell (Expo): providers, navigation, root layout
 ├── features/               # Vertical slices; each owns its UI, hooks and state
 │   ├── tasks/
 │   │   ├── components/     # TaskList, TaskCard, TaskForm, ...
@@ -22,17 +22,16 @@ src/
 │       ├── components/
 │       └── selectors.ts    # completion streaks, per-category/size stats
 ├── components/
-│   └── ui/                 # Feature-agnostic primitives: Button, Chip, Modal
+│   └── ui/                 # Feature-agnostic primitives: Button, Chip, Sheet
 ├── store/
 │   ├── index.ts            # Root store composing feature slices + persist
 │   └── migrations.ts       # Versioned migrations for persisted state
 ├── services/
-│   └── storage.ts          # Persistence adapter (localStorage now, API later)
-├── lib/                    # Generic helpers: dates, ids, cn() for Tailwind
+│   └── storage.ts          # Persistence adapter (AsyncStorage now, API later)
+├── lib/                    # Generic helpers: dates, ids
 ├── types/
 │   └── task.ts             # Domain models (shared across features)
-└── styles/
-    └── index.css           # Tailwind entry
+└── theme/                  # Design tokens (colors, spacing) for StyleSheet
 ```
 
 Rules: features import from each other only via their `index.ts`;
@@ -53,3 +52,9 @@ See `src/types/task.ts`.
   filters can later be synced to the URL or saved as presets.
 - `persist` middleware with a `version` + `migrate` handles schema evolution.
 - Far less boilerplate than Redux Toolkit, while keeping devtools support.
+
+## Styling: React Native `StyleSheet`
+
+Chosen over NativeWind for stability: no Babel/Metro/Tailwind build layer to
+keep in sync across Expo SDK upgrades, and full typing of style props. Colors
+come from light/dark palettes selected with `useColorScheme()`.

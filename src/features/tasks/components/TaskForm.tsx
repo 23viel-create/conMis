@@ -1,4 +1,17 @@
-import { useId, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useRef, useState, type ComponentProps, type ComponentRef } from 'react';
+import {
+  AccessibilityInfo,
+  LayoutAnimation,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  useColorScheme,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import {
   TASK_CATEGORIES,
   TASK_DEFAULTS,
@@ -9,86 +22,79 @@ import {
 } from '../../../types/task';
 import { useTasksStore } from '../store/tasksSlice';
 
+type IconName = ComponentProps<typeof Ionicons>['name'];
+
 const SIZE_LABELS: Record<TaskSize, { short: string; full: string }> = {
   small: { short: 'S', full: 'Small' },
   medium: { short: 'M', full: 'Medium' },
   large: { short: 'L', full: 'Large' },
 };
 
-const CATEGORY_LABELS: Record<TaskCategory, string> = {
-  home: 'Home',
-  work: 'Work',
-  personal: 'Personal',
-  uncategorized: 'None',
+const CATEGORY_OPTIONS: Record<TaskCategory, { label: string; icon: IconName }> = {
+  home: { label: 'Home', icon: 'home-outline' },
+  work: { label: 'Work', icon: 'briefcase-outline' },
+  personal: { label: 'Personal', icon: 'person-outline' },
+  uncategorized: { label: 'None', icon: 'ellipse-outline' },
 };
 
-const iconProps = {
-  viewBox: '0 0 24 24',
-  fill: 'none',
-  stroke: 'currentColor',
-  strokeWidth: 1.8,
-  strokeLinecap: 'round',
-  strokeLinejoin: 'round',
-  className: 'h-4 w-4 shrink-0',
-  'aria-hidden': true,
-} as const;
-
-const CATEGORY_ICONS: Record<TaskCategory, ReactNode> = {
-  home: (
-    <svg {...iconProps}>
-      <path d="M3 11l9-7 9 7" />
-      <path d="M5 10v10h14V10" />
-    </svg>
-  ),
-  work: (
-    <svg {...iconProps}>
-      <rect x="3" y="7" width="18" height="13" rx="2" />
-      <path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
-    </svg>
-  ),
-  personal: (
-    <svg {...iconProps}>
-      <circle cx="12" cy="8" r="4" />
-      <path d="M4 21a8 8 0 0 1 16 0" />
-    </svg>
-  ),
-  uncategorized: (
-    <svg {...iconProps}>
-      <circle cx="12" cy="12" r="8" strokeDasharray="3 3" />
-    </svg>
-  ),
+// Mirrors the Tailwind slate/indigo palette from the web draft.
+const palette = {
+  light: {
+    card: '#ffffff',
+    border: '#e2e8f0',
+    field: '#f1f5f9',
+    fieldFocused: '#ffffff',
+    text: '#0f172a',
+    textMuted: '#475569',
+    placeholder: '#94a3b8',
+    accent: '#4f46e5',
+    accentText: '#4338ca',
+    accentSoft: '#eef2ff',
+    segmentActive: '#ffffff',
+    onAccent: '#ffffff',
+  },
+  dark: {
+    card: '#0f172a',
+    border: '#334155',
+    field: '#1e293b',
+    fieldFocused: '#0f172a',
+    text: '#f1f5f9',
+    textMuted: '#cbd5e1',
+    placeholder: '#64748b',
+    accent: '#6366f1',
+    accentText: '#c7d2fe',
+    accentSoft: 'rgba(99, 102, 241, 0.15)',
+    segmentActive: '#334155',
+    onAccent: '#ffffff',
+  },
 };
-
-// Radio inputs are visually hidden; the sibling label is the visible control.
-// Native radios give us arrow-key navigation and form semantics for free.
-const radioInputClass = 'peer sr-only';
-const focusRingClass =
-  'peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-500 peer-focus-visible:ring-offset-2 dark:peer-focus-visible:ring-offset-slate-900';
 
 interface TaskFormProps {
   /** Called after a task was created, e.g. to show a toast or scroll to it. */
   onAdded?: (task: Task) => void;
-  className?: string;
+  style?: StyleProp<ViewStyle>;
 }
 
-export function TaskForm({ onAdded, className = '' }: TaskFormProps) {
+/**
+ * Quick-add form. If it sits inside a ScrollView, give that ScrollView
+ * `keyboardShouldPersistTaps="handled"` so chips respond while the keyboard is up.
+ */
+export function TaskForm({ onAdded, style }: TaskFormProps) {
   const addTask = useTasksStore((state) => state.addTask);
+  const colors = palette[useColorScheme() === 'dark' ? 'dark' : 'light'];
 
   const [title, setTitle] = useState('');
   const [size, setSize] = useState<TaskSize>(TASK_DEFAULTS.size);
   const [category, setCategory] = useState<TaskCategory>(TASK_DEFAULTS.category);
   const [notes, setNotes] = useState('');
   const [notesOpen, setNotesOpen] = useState(false);
-  const [announcement, setAnnouncement] = useState('');
+  const [focusedField, setFocusedField] = useState<'title' | 'notes' | null>(null);
 
-  const titleRef = useRef<HTMLInputElement>(null);
-  const notesRef = useRef<HTMLTextAreaElement>(null);
-  const id = useId();
+  const titleRef = useRef<ComponentRef<typeof TextInput>>(null);
 
   const canSubmit = title.trim().length > 0;
 
-  function handleSubmit(event?: FormEvent) {
-    event?.preventDefault();
+  function handleSubmit() {
     const task = addTask({ title, size, category, notes });
     if (!task) return;
 
@@ -96,157 +102,291 @@ export function TaskForm({ onAdded, className = '' }: TaskFormProps) {
     // to enter; title and notes reset for the next entry.
     setTitle('');
     setNotes('');
-    setNotesOpen(false);
-    setAnnouncement(`Added “${task.title}”`);
+    if (notesOpen) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setNotesOpen(false);
+    }
     titleRef.current?.focus();
+    AccessibilityInfo.announceForAccessibility(`Added ${task.title}`);
     onAdded?.(task);
   }
 
   function toggleNotes() {
-    const next = !notesOpen;
-    setNotesOpen(next);
-    if (next) requestAnimationFrame(() => notesRef.current?.focus());
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setNotesOpen((open) => !open);
   }
 
-  function handleNotesKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    // Enter makes new lines in notes; Cmd/Ctrl+Enter submits.
-    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-      event.preventDefault();
-      handleSubmit();
-    }
-  }
+  const notesToggleLabel = notesOpen ? 'Hide notes' : notes.trim() ? 'Notes (edited)' : 'Add notes';
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      aria-label="Quick add task"
-      className={`w-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-5 ${className}`}
+    <View
+      accessibilityLabel="Quick add task"
+      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }, style]}
     >
       {/* Title */}
-      <div className="flex items-center gap-2">
-        <label htmlFor={`${id}-title`} className="sr-only">
-          Task title
-        </label>
-        <input
+      <View style={styles.titleRow}>
+        <TextInput
           ref={titleRef}
-          id={`${id}-title`}
-          type="text"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChangeText={setTitle}
+          onSubmitEditing={handleSubmit}
+          onFocus={() => setFocusedField('title')}
+          onBlur={() => setFocusedField(null)}
           placeholder="What needs doing?"
-          autoComplete="off"
-          enterKeyHint="done"
+          placeholderTextColor={colors.placeholder}
+          accessibilityLabel="Task title"
+          returnKeyType="done"
+          submitBehavior="submit" // keep the keyboard up for rapid entry
+          autoCapitalize="sentences"
           maxLength={200}
-          className="min-w-0 flex-1 rounded-xl border border-transparent bg-slate-100 px-4 py-3 text-base text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:bg-slate-800 dark:text-slate-100 dark:focus:bg-slate-900"
+          style={[
+            styles.field,
+            styles.titleInput,
+            {
+              color: colors.text,
+              backgroundColor: focusedField === 'title' ? colors.fieldFocused : colors.field,
+              borderColor: focusedField === 'title' ? colors.accent : 'transparent',
+            },
+          ]}
         />
-        <button
-          type="submit"
+        <Pressable
+          onPress={handleSubmit}
           disabled={!canSubmit}
-          className="shrink-0 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40 dark:focus-visible:ring-offset-slate-900"
+          accessibilityRole="button"
+          accessibilityLabel="Add task"
+          accessibilityState={{ disabled: !canSubmit }}
+          style={({ pressed }) => [
+            styles.addButton,
+            { backgroundColor: colors.accent, opacity: !canSubmit ? 0.4 : pressed ? 0.8 : 1 },
+          ]}
         >
-          Add
-        </button>
-      </div>
+          <Text style={[styles.addButtonText, { color: colors.onAccent }]}>Add</Text>
+        </Pressable>
+      </View>
 
-      {/* Size + category */}
-      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <fieldset className="flex items-center gap-2">
-          <legend className="sr-only">Size</legend>
-          <span aria-hidden="true" className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            Size
-          </span>
-          <div className="inline-flex rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
-            {TASK_SIZES.map((value) => (
-              <div key={value}>
-                <input
-                  type="radio"
-                  id={`${id}-size-${value}`}
-                  name={`${id}-size`}
-                  value={value}
-                  checked={size === value}
-                  onChange={() => setSize(value)}
-                  className={radioInputClass}
-                />
-                <label
-                  htmlFor={`${id}-size-${value}`}
-                  title={SIZE_LABELS[value].full}
-                  className={`flex h-9 min-w-10 cursor-pointer select-none items-center justify-center rounded-md px-3 text-sm font-semibold text-slate-600 transition hover:text-slate-900 peer-checked:bg-white peer-checked:text-indigo-700 peer-checked:shadow-sm dark:text-slate-300 dark:hover:text-white dark:peer-checked:bg-slate-700 dark:peer-checked:text-indigo-300 ${focusRingClass}`}
+      {/* Size */}
+      <View style={styles.sizeRow}>
+        <Text style={[styles.sectionLabel, { color: colors.textMuted }]} importantForAccessibility="no">
+          SIZE
+        </Text>
+        <View
+          accessibilityRole="radiogroup"
+          accessibilityLabel="Size"
+          style={[styles.segmented, { backgroundColor: colors.field }]}
+        >
+          {TASK_SIZES.map((value) => {
+            const selected = size === value;
+            return (
+              <Pressable
+                key={value}
+                onPress={() => setSize(value)}
+                accessibilityRole="radio"
+                accessibilityLabel={SIZE_LABELS[value].full}
+                accessibilityState={{ checked: selected }}
+                hitSlop={4}
+                style={({ pressed }) => [
+                  styles.segment,
+                  selected && [styles.segmentSelected, { backgroundColor: colors.segmentActive }],
+                  pressed && !selected && styles.pressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.segmentText,
+                    { color: selected ? colors.accentText : colors.textMuted },
+                  ]}
                 >
-                  <span aria-hidden="true">{SIZE_LABELS[value].short}</span>
-                  <span className="sr-only">{SIZE_LABELS[value].full}</span>
-                </label>
-              </div>
-            ))}
-          </div>
-        </fieldset>
+                  {SIZE_LABELS[value].short}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
 
-        <fieldset>
-          <legend className="sr-only">Category</legend>
-          <div className="flex flex-wrap gap-1.5">
-            {TASK_CATEGORIES.map((value) => (
-              <div key={value}>
-                <input
-                  type="radio"
-                  id={`${id}-category-${value}`}
-                  name={`${id}-category`}
-                  value={value}
-                  checked={category === value}
-                  onChange={() => setCategory(value)}
-                  className={radioInputClass}
-                />
-                <label
-                  htmlFor={`${id}-category-${value}`}
-                  className={`flex h-9 cursor-pointer select-none items-center gap-1.5 rounded-full border border-slate-200 px-3 text-sm text-slate-600 transition hover:border-slate-300 hover:text-slate-900 peer-checked:border-indigo-500 peer-checked:bg-indigo-50 peer-checked:text-indigo-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:text-white dark:peer-checked:border-indigo-400 dark:peer-checked:bg-indigo-500/15 dark:peer-checked:text-indigo-200 ${focusRingClass}`}
-                >
-                  {CATEGORY_ICONS[value]}
-                  {CATEGORY_LABELS[value]}
-                </label>
-              </div>
-            ))}
-          </div>
-        </fieldset>
-      </div>
+      {/* Category */}
+      <View accessibilityRole="radiogroup" accessibilityLabel="Category" style={styles.chips}>
+        {TASK_CATEGORIES.map((value) => {
+          const selected = category === value;
+          const { label, icon } = CATEGORY_OPTIONS[value];
+          const tint = selected ? colors.accentText : colors.textMuted;
+          return (
+            <Pressable
+              key={value}
+              onPress={() => setCategory(value)}
+              accessibilityRole="radio"
+              accessibilityLabel={label}
+              accessibilityState={{ checked: selected }}
+              style={({ pressed }) => [
+                styles.chip,
+                {
+                  borderColor: selected ? colors.accent : colors.border,
+                  backgroundColor: selected ? colors.accentSoft : 'transparent',
+                },
+                pressed && !selected && styles.pressed,
+              ]}
+            >
+              <Ionicons name={icon} size={16} color={tint} />
+              <Text style={[styles.chipText, { color: tint }]}>{label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
 
       {/* Notes (collapsed by default) */}
-      <div className="mt-3">
-        <button
-          type="button"
-          onClick={toggleNotes}
-          aria-expanded={notesOpen}
-          aria-controls={`${id}-notes-panel`}
-          className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm text-slate-500 transition hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-400 dark:hover:text-slate-200"
-        >
-          <svg
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            aria-hidden="true"
-            className={`h-4 w-4 transition-transform ${notesOpen ? 'rotate-90' : ''}`}
-          >
-            <path d="M7.5 5l5 5-5 5V5z" />
-          </svg>
-          {notesOpen ? 'Hide notes' : notes.trim() ? 'Notes (edited)' : 'Add notes'}
-        </button>
+      <Pressable
+        onPress={toggleNotes}
+        accessibilityRole="button"
+        accessibilityLabel={notesToggleLabel}
+        accessibilityState={{ expanded: notesOpen }}
+        hitSlop={8}
+        style={({ pressed }) => [styles.notesToggle, pressed && styles.pressed]}
+      >
+        <Ionicons
+          name={notesOpen ? 'chevron-down' : 'chevron-forward'}
+          size={16}
+          color={colors.textMuted}
+        />
+        <Text style={[styles.notesToggleText, { color: colors.textMuted }]}>{notesToggleLabel}</Text>
+      </Pressable>
 
-        <div id={`${id}-notes-panel`} hidden={!notesOpen} className="mt-2">
-          <label htmlFor={`${id}-notes`} className="sr-only">
-            Notes
-          </label>
-          <textarea
-            ref={notesRef}
-            id={`${id}-notes`}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            onKeyDown={handleNotesKeyDown}
-            rows={3}
-            placeholder="Plan it out… (⌘/Ctrl + Enter to add)"
-            className="w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:bg-slate-900"
-          />
-        </div>
-      </div>
-
-      <p role="status" aria-live="polite" className="sr-only">
-        {announcement}
-      </p>
-    </form>
+      {notesOpen && (
+        <TextInput
+          value={notes}
+          onChangeText={setNotes}
+          onFocus={() => setFocusedField('notes')}
+          onBlur={() => setFocusedField(null)}
+          autoFocus
+          multiline
+          textAlignVertical="top"
+          placeholder="Plan it out…"
+          placeholderTextColor={colors.placeholder}
+          accessibilityLabel="Notes"
+          style={[
+            styles.field,
+            styles.notesInput,
+            {
+              color: colors.text,
+              backgroundColor: focusedField === 'notes' ? colors.fieldFocused : colors.field,
+              borderColor: focusedField === 'notes' ? colors.accent : colors.border,
+            },
+          ]}
+        />
+      )}
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  card: {
+    width: '100%',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 16,
+    gap: 12,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  field: {
+    borderRadius: 12,
+    borderWidth: 1.5,
+    paddingHorizontal: 14,
+    fontSize: 16,
+  },
+  titleInput: {
+    flex: 1,
+    minHeight: 48,
+    paddingVertical: 12,
+  },
+  addButton: {
+    minHeight: 48,
+    minWidth: 64,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  sizeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+  },
+  segmented: {
+    flexDirection: 'row',
+    borderRadius: 10,
+    padding: 4,
+    gap: 2,
+  },
+  segment: {
+    minWidth: 48,
+    height: 40,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  segmentSelected: {
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  segmentText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 40,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  chipText: {
+    fontSize: 14,
+  },
+  notesToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    paddingVertical: 4,
+  },
+  notesToggleText: {
+    fontSize: 14,
+  },
+  notesInput: {
+    minHeight: 96,
+    paddingTop: 12,
+    paddingBottom: 12,
+    fontSize: 15,
+  },
+  pressed: {
+    opacity: 0.6,
+  },
+});
