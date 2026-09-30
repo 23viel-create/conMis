@@ -2,7 +2,9 @@ import { useSyncExternalStore } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create, type StateCreator } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { isDayKey } from '../../../lib/dayKey';
 import { TASK_DEFAULTS, type NewTaskInput, type Task, type TaskId } from '../../../types/task';
+import { STORAGE_VERSION, migrateTasks, type PersistedTasks } from './migrations';
 
 export interface TasksSlice {
   tasks: Task[];
@@ -14,9 +16,6 @@ export interface TasksSlice {
   /** Marks an open task complete (now), or reopens a completed one (null). */
   toggleComplete: (id: TaskId) => void;
 }
-
-/** Only data is persisted; actions are recreated on every launch. */
-type PersistedTasks = Pick<TasksSlice, 'tasks'>;
 
 // On native, crypto.randomUUID is provided by src/lib/polyfills.ts (expo-crypto).
 const generateId = (): string => crypto.randomUUID();
@@ -38,6 +37,7 @@ export const createTasksSlice: StateCreator<TasksSlice, [['zustand/persist', unk
       notes: input.notes?.trim() ?? TASK_DEFAULTS.notes,
       createdAt: Date.now(),
       completedAt: null,
+      scheduledFor: isDayKey(input.scheduledFor) ? input.scheduledFor : TASK_DEFAULTS.scheduledFor,
     };
 
     // Stored in creation order; display ordering is the job of selectors.
@@ -56,23 +56,15 @@ export const createTasksSlice: StateCreator<TasksSlice, [['zustand/persist', unk
   },
 });
 
-/**
- * Bump when the persisted shape of `Task` changes, and teach `migrate` how to
- * upgrade older snapshots, so existing users never lose their tasks.
- */
-const STORAGE_VERSION = 1;
-
 export const useTasksStore = create<TasksSlice>()(
   persist(createTasksSlice, {
     name: 'conmis.tasks',
     storage: createJSONStorage<PersistedTasks>(() => AsyncStorage),
     version: STORAGE_VERSION,
+    // Only data is persisted; actions are recreated on every launch.
     partialize: (state) => ({ tasks: state.tasks }),
-    migrate: (persisted, fromVersion) => {
-      // No older versions exist yet. Future: `if (fromVersion < 2) { ... }`.
-      void fromVersion;
-      return persisted as PersistedTasks;
-    },
+    // Upgrades older saves (see migrations.ts) so users never lose tasks.
+    migrate: migrateTasks,
   }),
 );
 

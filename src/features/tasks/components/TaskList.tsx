@@ -1,10 +1,14 @@
 import { memo, useMemo, type ReactElement } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import { dayKeyToDate } from '../../../lib/dayKey';
 import { isCompleted, type Task, type TaskId } from '../../../types/task';
 import { useColors, type Colors } from '../../../theme/colors';
+import type { TimelineView } from '../../calendar';
+import { useVisibleTasks } from '../hooks/useVisibleTasks';
+import { effectiveDay } from '../selectors';
 import { useTasksStore } from '../store/tasksSlice';
-import { sortTasksForList } from '../selectors';
 import { CATEGORY_OPTIONS, SIZE_LABELS } from '../taskMeta';
 
 interface TaskListProps {
@@ -12,22 +16,37 @@ interface TaskListProps {
   header?: ReactElement;
 }
 
+/** Shows the tasks for the view selected in TimelineNav. */
 export function TaskList({ header }: TaskListProps) {
-  const tasks = useTasksStore((state) => state.tasks);
+  const { tasks, view, today } = useVisibleTasks();
   const toggleComplete = useTasksStore((state) => state.toggleComplete);
   const colors = useColors();
+  const { i18n } = useTranslation();
 
-  const sorted = useMemo(() => sortTasksForList(tasks), [tasks]);
+  // In the week view each row names its day ("Thu"); single-day views don't need it.
+  const weekdayFormat = useMemo(
+    () => new Intl.DateTimeFormat(i18n.language, { weekday: 'short' }),
+    [i18n.language],
+  );
 
   return (
     <FlatList
-      data={sorted}
+      data={tasks}
       keyExtractor={(task) => task.id}
       renderItem={({ item }) => (
-        <TaskRow task={item} colors={colors} onToggle={toggleComplete} />
+        <TaskRow
+          task={item}
+          colors={colors}
+          onToggle={toggleComplete}
+          dayLabel={
+            view === 'week'
+              ? weekdayFormat.format(dayKeyToDate(effectiveDay(item, today)))
+              : undefined
+          }
+        />
       )}
       ListHeaderComponent={header}
-      ListEmptyComponent={<EmptyState colors={colors} />}
+      ListEmptyComponent={<EmptyState colors={colors} view={view} />}
       ItemSeparatorComponent={Separator}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
@@ -40,11 +59,13 @@ interface TaskRowProps {
   task: Task;
   colors: Colors;
   onToggle: (id: TaskId) => void;
+  /** Weekday shown in the meta row, e.g. in the week view. */
+  dayLabel?: string;
 }
 
 // Memoized: toggling one task only re-renders that row, because the store
 // keeps the identity of untouched task objects.
-const TaskRow = memo(function TaskRow({ task, colors, onToggle }: TaskRowProps) {
+const TaskRow = memo(function TaskRow({ task, colors, onToggle, dayLabel }: TaskRowProps) {
   const done = isCompleted(task);
   const category = CATEGORY_OPTIONS[task.category];
   const notesPreview = task.notes.trim();
@@ -84,6 +105,9 @@ const TaskRow = memo(function TaskRow({ task, colors, onToggle }: TaskRowProps) 
         </Text>
 
         <View style={styles.meta}>
+          {dayLabel !== undefined && (
+            <Text style={[styles.dayLabel, { color: colors.accentText }]}>{dayLabel}</Text>
+          )}
           <View
             style={[styles.sizeBadge, { backgroundColor: colors.field }]}
             accessibilityLabel={`Size: ${SIZE_LABELS[task.size].full}`}
@@ -112,12 +136,13 @@ function Separator() {
   return <View style={styles.separator} />;
 }
 
-function EmptyState({ colors }: { colors: Colors }) {
+function EmptyState({ colors, view }: { colors: Colors; view: TimelineView }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.empty}>
       <Ionicons name="checkbox-outline" size={32} color={colors.placeholder} />
       <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-        No tasks yet. Add your first one above.
+        {t(`tasks.empty.${view}`)}
       </Text>
     </View>
   );
@@ -178,6 +203,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  dayLabel: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   metaText: {
     fontSize: 13,

@@ -1,4 +1,12 @@
 export { TimelineNav } from './components/TimelineNav';
+export { useTodayKey } from './hooks/useTodayKey';
 export { useCalendarStore } from './store/calendarSlice';
-export { TIMELINE_VIEWS, getViewRange, isInRange } from './timeline';
-export type { DateRange, TimelineView } from './timeline';
+export {
+  TIMELINE_VIEWS,
+  defaultDayForView,
+  getViewDayRange,
+  getViewRange,
+  isDayInRange,
+  isInRange,
+} from './timeline';
+export type { DateRange, DayKeyRange, TimelineView } from './timeline';

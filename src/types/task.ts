@@ -14,6 +14,13 @@ export type TaskCategory = (typeof TASK_CATEGORIES)[number];
 /** Milliseconds since the Unix epoch (Date.now()). JSON-safe and cheap to sort/compare. */
 export type Timestamp = number;
 
+/**
+ * A local calendar day as 'YYYY-MM-DD'. Deliberately not a timestamp: a task
+ * planned for "Thursday" stays on Thursday even if the device changes time
+ * zone. Keys sort and compare correctly as plain strings.
+ */
+export type DayKey = string;
+
 /** Unique task identifier (generated with crypto.randomUUID()). */
 export type TaskId = string;
 
@@ -27,20 +34,23 @@ export interface Task {
   createdAt: Timestamp;
   /** null while open; set when completed. Cleared again if the task is reopened. */
   completedAt: Timestamp | null;
+  /** Day the task is planned for; null = unscheduled (shown on Today). */
+  scheduledFor: DayKey | null;
 }
 
 /** Input for creating a task: the store owns id and timestamps. */
 export type NewTaskInput = Pick<Task, 'title'> &
-  Partial<Pick<Task, 'size' | 'category' | 'notes'>>;
+  Partial<Pick<Task, 'size' | 'category' | 'notes' | 'scheduledFor'>>;
 
 /** Fields a user may edit after creation. */
-export type TaskPatch = Partial<Pick<Task, 'title' | 'size' | 'category' | 'notes'>>;
+export type TaskPatch = Partial<Pick<Task, 'title' | 'size' | 'category' | 'notes' | 'scheduledFor'>>;
 
 export const TASK_DEFAULTS = {
   size: 'medium',
   category: 'uncategorized',
   notes: '',
-} as const satisfies Pick<Task, 'size' | 'category' | 'notes'>;
+  scheduledFor: null,
+} as const satisfies Pick<Task, 'size' | 'category' | 'notes' | 'scheduledFor'>;
 
 /** Derived, never stored: completion state is computed from completedAt. */
 export const isCompleted = (task: Task): boolean => task.completedAt !== null;

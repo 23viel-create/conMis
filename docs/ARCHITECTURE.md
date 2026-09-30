@@ -10,13 +10,14 @@ src/
 ├── features/               # Vertical slices; each owns its UI, hooks and state
 │   ├── tasks/
 │   │   ├── components/     # TaskList, TaskCard, TaskForm, ...
-│   │   ├── hooks/          # useTaskActions, useTask(id), ...
-│   │   ├── store/          # tasksSlice.ts (Zustand slice)
+│   │   ├── hooks/          # useVisibleTasks (tasks x active timeline view)
+│   │   ├── store/          # tasksSlice.ts (persisted), migrations.ts
 │   │   ├── selectors.ts    # Pure, memoizable derivations over tasks
 │   │   ├── taskMeta.ts     # Labels/icons for sizes and categories
 │   │   └── index.ts        # Public API of the feature
 │   ├── calendar/           # Timeline views (Yesterday/Today/Tomorrow/Week)
 │   │   ├── components/     # TimelineNav
+│   │   ├── hooks/          # useTodayKey (rolls over at midnight / on resume)
 │   │   ├── store/          # calendarSlice.ts (not persisted)
 │   │   └── timeline.ts     # Pure view -> date-range logic (local time, DST-safe)
 │   ├── filters/            # Cross-filtering: filter state + filter UI
@@ -33,7 +34,7 @@ src/
 │   └── migrations.ts       # Versioned migrations for persisted state
 ├── services/
 │   └── storage.ts          # Persistence adapter (AsyncStorage now, API later)
-├── lib/                    # polyfills.ts (crypto.randomUUID), i18n.ts
+├── lib/                    # polyfills.ts, i18n.ts, dayKey.ts ('YYYY-MM-DD' helpers)
 ├── locales/                # he.ts (base, defines the keys), en.ts
 ├── types/
 │   └── task.ts             # Domain models (shared across features)
@@ -46,7 +47,13 @@ so they can be unit-tested without React.
 
 ## Data model
 
-See `src/types/task.ts`.
+See `src/types/task.ts`. Tasks are planned onto days with `scheduledFor`, a
+local `'YYYY-MM-DD'` day key (not a timestamp, so it never shifts across time
+zones). `null` means unscheduled; such tasks appear on Today.
+
+Persisted data is versioned (`STORAGE_VERSION` in
+`features/tasks/store/migrations.ts`). Any change to the saved shape bumps
+the version and adds a step to `migrateTasks`, which must never throw.
 
 ## State management: Zustand
 

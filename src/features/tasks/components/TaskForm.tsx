@@ -20,6 +20,7 @@ import {
   type TaskSize,
 } from '../../../types/task';
 import { useColors } from '../../../theme/colors';
+import { defaultDayForView, useCalendarStore, useTodayKey } from '../../calendar';
 import { useTasksStore } from '../store/tasksSlice';
 import { CATEGORY_OPTIONS, SIZE_LABELS } from '../taskMeta';
 
@@ -35,6 +36,9 @@ interface TaskFormProps {
  */
 export function TaskForm({ onAdded, style }: TaskFormProps) {
   const addTask = useTasksStore((state) => state.addTask);
+  // New tasks land on the day being viewed, so they appear right where they were added.
+  const activeView = useCalendarStore((state) => state.activeView);
+  const today = useTodayKey();
   const colors = useColors();
 
   const [title, setTitle] = useState('');
@@ -49,7 +53,13 @@ export function TaskForm({ onAdded, style }: TaskFormProps) {
   const canSubmit = title.trim().length > 0;
 
   function handleSubmit() {
-    const task = addTask({ title, size, category, notes });
+    const task = addTask({
+      title,
+      size,
+      category,
+      notes,
+      scheduledFor: defaultDayForView(activeView, today),
+    });
     if (!task) return;
 
     // Size and category stay selected so batches of similar tasks are fast

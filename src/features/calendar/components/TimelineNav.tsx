@@ -13,6 +13,8 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useColors } from '../../../theme/colors';
+import { dayKeyToDate } from '../../../lib/dayKey';
+import { useTodayKey } from '../hooks/useTodayKey';
 import { useCalendarStore } from '../store/calendarSlice';
 import { TIMELINE_VIEWS, getViewRange, type DateRange, type TimelineView } from '../timeline';
 
@@ -31,6 +33,7 @@ export function TimelineNav({ style }: TimelineNavProps) {
   const colors = useColors();
   const activeView = useCalendarStore((state) => state.activeView);
   const setActiveView = useCalendarStore((state) => state.setActiveView);
+  const today = useTodayKey();
 
   const [trackWidth, setTrackWidth] = useState(0);
   const translateX = useRef(new Animated.Value(0)).current;
@@ -111,7 +114,11 @@ export function TimelineNav({ style }: TimelineNavProps) {
       </View>
 
       <Text style={[styles.caption, { color: colors.textMuted }]}>
-        {formatRange(activeView, getViewRange(activeView), i18n.language)}
+        {formatRange(
+          activeView,
+          getViewRange(activeView, dayKeyToDate(today).getTime()),
+          i18n.language,
+        )}
       </Text>
     </View>
   );
