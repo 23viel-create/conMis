@@ -1,5 +1,5 @@
 import { create, type StateCreator } from 'zustand';
-import { TASK_DEFAULTS, type NewTaskInput, type Task } from '../../../types/task';
+import { TASK_DEFAULTS, type NewTaskInput, type Task, type TaskId } from '../../../types/task';
 
 export interface TasksSlice {
   tasks: Task[];
@@ -8,9 +8,11 @@ export interface TasksSlice {
    * `completedAt`. Returns the created task, or `null` if the title is blank.
    */
   addTask: (input: NewTaskInput) => Task | null;
+  /** Marks an open task complete (now), or reopens a completed one (null). */
+  toggleComplete: (id: TaskId) => void;
 }
 
-// Requires a secure context (https or localhost), which covers dev and prod.
+// On native, crypto.randomUUID is provided by src/lib/polyfills.ts (expo-crypto).
 const generateId = (): string => crypto.randomUUID();
 
 /**
@@ -38,6 +40,16 @@ export const createTasksSlice: StateCreator<TasksSlice> = (set) => ({
     // Stored in creation order; display ordering is the job of selectors.
     set((state) => ({ tasks: [...state.tasks, task] }));
     return task;
+  },
+
+  toggleComplete: (id) => {
+    set((state) => ({
+      tasks: state.tasks.map((task) =>
+        task.id === id
+          ? { ...task, completedAt: task.completedAt === null ? Date.now() : null }
+          : task,
+      ),
+    }));
   },
 });
 

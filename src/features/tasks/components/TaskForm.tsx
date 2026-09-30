@@ -1,4 +1,4 @@
-import { useRef, useState, type ComponentProps, type ComponentRef } from 'react';
+import { useRef, useState, type ComponentRef } from 'react';
 import {
   AccessibilityInfo,
   LayoutAnimation,
@@ -7,7 +7,6 @@ import {
   Text,
   TextInput,
   View,
-  useColorScheme,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -20,54 +19,9 @@ import {
   type TaskCategory,
   type TaskSize,
 } from '../../../types/task';
+import { useColors } from '../../../theme/colors';
 import { useTasksStore } from '../store/tasksSlice';
-
-type IconName = ComponentProps<typeof Ionicons>['name'];
-
-const SIZE_LABELS: Record<TaskSize, { short: string; full: string }> = {
-  small: { short: 'S', full: 'Small' },
-  medium: { short: 'M', full: 'Medium' },
-  large: { short: 'L', full: 'Large' },
-};
-
-const CATEGORY_OPTIONS: Record<TaskCategory, { label: string; icon: IconName }> = {
-  home: { label: 'Home', icon: 'home-outline' },
-  work: { label: 'Work', icon: 'briefcase-outline' },
-  personal: { label: 'Personal', icon: 'person-outline' },
-  uncategorized: { label: 'None', icon: 'ellipse-outline' },
-};
-
-// Mirrors the Tailwind slate/indigo palette from the web draft.
-const palette = {
-  light: {
-    card: '#ffffff',
-    border: '#e2e8f0',
-    field: '#f1f5f9',
-    fieldFocused: '#ffffff',
-    text: '#0f172a',
-    textMuted: '#475569',
-    placeholder: '#94a3b8',
-    accent: '#4f46e5',
-    accentText: '#4338ca',
-    accentSoft: '#eef2ff',
-    segmentActive: '#ffffff',
-    onAccent: '#ffffff',
-  },
-  dark: {
-    card: '#0f172a',
-    border: '#334155',
-    field: '#1e293b',
-    fieldFocused: '#0f172a',
-    text: '#f1f5f9',
-    textMuted: '#cbd5e1',
-    placeholder: '#64748b',
-    accent: '#6366f1',
-    accentText: '#c7d2fe',
-    accentSoft: 'rgba(99, 102, 241, 0.15)',
-    segmentActive: '#334155',
-    onAccent: '#ffffff',
-  },
-};
+import { CATEGORY_OPTIONS, SIZE_LABELS } from '../taskMeta';
 
 interface TaskFormProps {
   /** Called after a task was created, e.g. to show a toast or scroll to it. */
@@ -81,7 +35,7 @@ interface TaskFormProps {
  */
 export function TaskForm({ onAdded, style }: TaskFormProps) {
   const addTask = useTasksStore((state) => state.addTask);
-  const colors = palette[useColorScheme() === 'dark' ? 'dark' : 'light'];
+  const colors = useColors();
 
   const [title, setTitle] = useState('');
   const [size, setSize] = useState<TaskSize>(TASK_DEFAULTS.size);
@@ -154,7 +108,7 @@ export function TaskForm({ onAdded, style }: TaskFormProps) {
           disabled={!canSubmit}
           accessibilityRole="button"
           accessibilityLabel="Add task"
-          accessibilityState={{ disabled: !canSubmit }}
+          aria-disabled={!canSubmit}
           style={({ pressed }) => [
             styles.addButton,
             { backgroundColor: colors.accent, opacity: !canSubmit ? 0.4 : pressed ? 0.8 : 1 },
@@ -182,7 +136,7 @@ export function TaskForm({ onAdded, style }: TaskFormProps) {
                 onPress={() => setSize(value)}
                 accessibilityRole="radio"
                 accessibilityLabel={SIZE_LABELS[value].full}
-                accessibilityState={{ checked: selected }}
+                aria-checked={selected}
                 hitSlop={4}
                 style={({ pressed }) => [
                   styles.segment,
@@ -216,7 +170,7 @@ export function TaskForm({ onAdded, style }: TaskFormProps) {
               onPress={() => setCategory(value)}
               accessibilityRole="radio"
               accessibilityLabel={label}
-              accessibilityState={{ checked: selected }}
+              aria-checked={selected}
               style={({ pressed }) => [
                 styles.chip,
                 {
@@ -238,7 +192,7 @@ export function TaskForm({ onAdded, style }: TaskFormProps) {
         onPress={toggleNotes}
         accessibilityRole="button"
         accessibilityLabel={notesToggleLabel}
-        accessibilityState={{ expanded: notesOpen }}
+        aria-expanded={notesOpen}
         hitSlop={8}
         style={({ pressed }) => [styles.notesToggle, pressed && styles.pressed]}
       >

@@ -1,18 +1,19 @@
 # Architecture
 
-Platform: React Native (Expo), TypeScript.
+Platform: React Native (Expo SDK 57, Expo Router), TypeScript.
 
 ## Folder structure
 
 ```
 src/
-├── app/                    # App shell (Expo): providers, navigation, root layout
+├── app/                    # Expo Router routes: _layout.tsx (shell), index.tsx (home)
 ├── features/               # Vertical slices; each owns its UI, hooks and state
 │   ├── tasks/
 │   │   ├── components/     # TaskList, TaskCard, TaskForm, ...
 │   │   ├── hooks/          # useTaskActions, useTask(id), ...
 │   │   ├── store/          # tasksSlice.ts (Zustand slice)
 │   │   ├── selectors.ts    # Pure, memoizable derivations over tasks
+│   │   ├── taskMeta.ts     # Labels/icons for sizes and categories
 │   │   └── index.ts        # Public API of the feature
 │   ├── filters/            # Cross-filtering: filter state + filter UI
 │   │   ├── components/
@@ -28,7 +29,7 @@ src/
 │   └── migrations.ts       # Versioned migrations for persisted state
 ├── services/
 │   └── storage.ts          # Persistence adapter (AsyncStorage now, API later)
-├── lib/                    # Generic helpers: dates, ids
+├── lib/                    # Generic helpers, polyfills.ts (crypto.randomUUID)
 ├── types/
 │   └── task.ts             # Domain models (shared across features)
 └── theme/                  # Design tokens (colors, spacing) for StyleSheet
