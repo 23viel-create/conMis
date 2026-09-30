@@ -1,5 +1,6 @@
 import { memo, useMemo, type ReactElement } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { dayKeyToDate } from '../../../lib/dayKey';
@@ -7,7 +8,8 @@ import { isCompleted, type Task, type TaskId } from '../../../types/task';
 import { useColors, type Colors } from '../../../theme/colors';
 import type { TimelineView } from '../../calendar';
 import { useVisibleTasks } from '../hooks/useVisibleTasks';
-import { effectiveDay } from '../selectors';
+import { notePreviewText } from '../notes/noteMarkdown';
+import { effectiveDay, previewNote } from '../selectors';
 import { useTasksStore } from '../store/tasksSlice';
 import { CATEGORY_OPTIONS, SIZE_LABELS } from '../taskMeta';
 
@@ -68,7 +70,8 @@ interface TaskRowProps {
 const TaskRow = memo(function TaskRow({ task, colors, onToggle, dayLabel }: TaskRowProps) {
   const done = isCompleted(task);
   const category = CATEGORY_OPTIONS[task.category];
-  const notesPreview = task.notes.trim();
+  const note = previewNote(task);
+  const notesPreview = note ? notePreviewText(note.content) : '';
 
   return (
     <View
@@ -93,7 +96,12 @@ const TaskRow = memo(function TaskRow({ task, colors, onToggle, dayLabel }: Task
         />
       </Pressable>
 
-      <View style={styles.body}>
+      <Pressable
+        onPress={() => router.push({ pathname: '/task/[id]', params: { id: task.id } })}
+        accessibilityRole="button"
+        accessibilityHint="Opens the task to edit it and see its notes"
+        style={({ pressed }) => [styles.body, pressed && styles.pressed]}
+      >
         <Text
           style={[
             styles.title,
@@ -123,11 +131,14 @@ const TaskRow = memo(function TaskRow({ task, colors, onToggle, dayLabel }: Task
         </View>
 
         {notesPreview.length > 0 && (
-          <Text numberOfLines={2} style={[styles.notes, { color: colors.textMuted }]}>
-            {notesPreview}
-          </Text>
+          <View style={styles.notesRow}>
+            {note?.isPinned && <Ionicons name="pin" size={13} color={colors.textMuted} />}
+            <Text numberOfLines={2} style={[styles.notes, { color: colors.textMuted }]}>
+              {notesPreview}
+            </Text>
+          </View>
         )}
-      </View>
+      </Pressable>
     </View>
   );
 });
@@ -211,7 +222,13 @@ const styles = StyleSheet.create({
   metaText: {
     fontSize: 13,
   },
+  notesRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 4,
+  },
   notes: {
+    flex: 1,
     fontSize: 14,
     lineHeight: 20,
   },

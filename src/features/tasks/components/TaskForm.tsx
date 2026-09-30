@@ -12,9 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  TASK_CATEGORIES,
   TASK_DEFAULTS,
-  TASK_SIZES,
   type Task,
   type TaskCategory,
   type TaskSize,
@@ -22,7 +20,8 @@ import {
 import { useColors } from '../../../theme/colors';
 import { defaultDayForView, useCalendarStore, useTodayKey } from '../../calendar';
 import { useTasksStore } from '../store/tasksSlice';
-import { CATEGORY_OPTIONS, SIZE_LABELS } from '../taskMeta';
+import { CategoryPicker } from './CategoryPicker';
+import { SizePicker } from './SizePicker';
 
 interface TaskFormProps {
   /** Called after a task was created, e.g. to show a toast or scroll to it. */
@@ -133,69 +132,11 @@ export function TaskForm({ onAdded, style }: TaskFormProps) {
         <Text style={[styles.sectionLabel, { color: colors.textMuted }]} importantForAccessibility="no">
           SIZE
         </Text>
-        <View
-          accessibilityRole="radiogroup"
-          accessibilityLabel="Size"
-          style={[styles.segmented, { backgroundColor: colors.field }]}
-        >
-          {TASK_SIZES.map((value) => {
-            const selected = size === value;
-            return (
-              <Pressable
-                key={value}
-                onPress={() => setSize(value)}
-                accessibilityRole="radio"
-                accessibilityLabel={SIZE_LABELS[value].full}
-                aria-checked={selected}
-                hitSlop={4}
-                style={({ pressed }) => [
-                  styles.segment,
-                  selected && [styles.segmentSelected, { backgroundColor: colors.segmentActive }],
-                  pressed && !selected && styles.pressed,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.segmentText,
-                    { color: selected ? colors.accentText : colors.textMuted },
-                  ]}
-                >
-                  {SIZE_LABELS[value].short}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <SizePicker value={size} onChange={setSize} />
       </View>
 
       {/* Category */}
-      <View accessibilityRole="radiogroup" accessibilityLabel="Category" style={styles.chips}>
-        {TASK_CATEGORIES.map((value) => {
-          const selected = category === value;
-          const { label, icon } = CATEGORY_OPTIONS[value];
-          const tint = selected ? colors.accentText : colors.textMuted;
-          return (
-            <Pressable
-              key={value}
-              onPress={() => setCategory(value)}
-              accessibilityRole="radio"
-              accessibilityLabel={label}
-              aria-checked={selected}
-              style={({ pressed }) => [
-                styles.chip,
-                {
-                  borderColor: selected ? colors.accent : colors.border,
-                  backgroundColor: selected ? colors.accentSoft : 'transparent',
-                },
-                pressed && !selected && styles.pressed,
-              ]}
-            >
-              <Ionicons name={icon} size={16} color={tint} />
-              <Text style={[styles.chipText, { color: tint }]}>{label}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <CategoryPicker value={category} onChange={setCategory} />
 
       {/* Notes (collapsed by default) */}
       <Pressable
@@ -291,48 +232,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 0.8,
-  },
-  segmented: {
-    flexDirection: 'row',
-    borderRadius: 10,
-    padding: 4,
-    gap: 2,
-  },
-  segment: {
-    minWidth: 48,
-    height: 40,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-  },
-  segmentSelected: {
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
-  },
-  segmentText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    height: 40,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  chipText: {
-    fontSize: 14,
   },
   notesToggle: {
     flexDirection: 'row',

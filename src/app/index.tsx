@@ -1,4 +1,4 @@
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TimelineNav } from '../features/calendar';
 import { TaskForm } from '../features/tasks/components/TaskForm';
@@ -15,10 +15,9 @@ export default function HomeScreen() {
       {/* Saved tasks load in a few milliseconds; rendering before that would
           flash the empty state and could drop a task typed in the meantime. */}
       {hydrated ? (
-        <KeyboardAvoidingView
-          style={styles.flex}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
+        // 'padding' on both platforms: with Android edge-to-edge the window no
+        // longer resizes for the keyboard, so we have to make room ourselves.
+        <KeyboardAvoidingView style={styles.flex} behavior="padding">
           {/* The form is the list header, so everything scrolls as one surface
               and we avoid nesting a FlatList inside a ScrollView. */}
           <TaskList

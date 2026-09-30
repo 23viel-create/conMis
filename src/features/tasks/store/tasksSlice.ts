@@ -2,9 +2,25 @@ import { useSyncExternalStore } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create, type StateCreator } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { isDayKey } from '../../../lib/dayKey';
-import { TASK_DEFAULTS, type NewTaskInput, type Task, type TaskId } from '../../../types/task';
+import { isDayKey, toDayKey } from '../../../lib/dayKey';
+import {
+  TASK_DEFAULTS,
+  type NewTaskInput,
+  type Note,
+  type NoteId,
+  type NoteKind,
+  type Task,
+  type TaskId,
+  type TaskPatch,
+} from '../../../types/task';
+import { toggleChecklistLine } from '../notes/noteMarkdown';
+import { buildRescheduleNote, isPostponement } from '../rescheduling';
 import { STORAGE_VERSION, migrateTasks, type PersistedTasks } from './migrations';
+
+export interface UpdateTaskOptions {
+  /** Why the task was postponed; recorded in the automatic reschedule note. */
+  rescheduleReason?: string;
+}
 
 export interface TasksSlice {
   tasks: Task[];
@@ -15,10 +31,34 @@ export interface TasksSlice {
   addTask: (input: NewTaskInput) => Task | null;
   /** Marks an open task complete (now), or reopens a completed one (null). */
   toggleComplete: (id: TaskId) => void;
+  /**
+   * Edits title, size, category or date. Moving `scheduledFor` later than
+   * the task's current day appends a reschedule note (with the reason).
+   * A blank title or malformed date in the patch is ignored.
+   */
+  updateTask: (id: TaskId, patch: TaskPatch, options?: UpdateTaskOptions) => void;
+  /** Appends a note. Returns it, or `null` if the content is blank. */
+  addNoteToTask: (taskId: TaskId, content: string, isPinned?: boolean) => Note | null;
+  toggleNotePin: (taskId: TaskId, noteId: NoteId) => void;
+  /** Checks or unchecks one '- [ ]' line inside a note. */
+  toggleNoteChecklistItem: (taskId: TaskId, noteId: NoteId, lineIndex: number) => void;
 }
 
 // On native, crypto.randomUUID is provided by src/lib/polyfills.ts (expo-crypto).
 const generateId = (): string => crypto.randomUUID();
+
+function createNote(content: string, kind: NoteKind = 'user', isPinned = false): Note {
+  return { id: generateId(), content, createdAt: Date.now(), isPinned, kind };
+}
+
+/** Replaces one task; every other task keeps its identity (memoized rows skip re-render). */
+function mapTask(tasks: Task[], id: TaskId, update: (task: Task) => Task): Task[] {
+  return tasks.map((task) => (task.id === id ? update(task) : task));
+}
+
+function mapNote(task: Task, noteId: NoteId, update: (note: Note) => Note): Task {
+  return { ...task, notes: task.notes.map((note) => (note.id === noteId ? update(note) : note)) };
+}
 
 export const createTasksSlice: StateCreator<TasksSlice, [['zustand/persist', unknown]]> = (
   set,
@@ -29,12 +69,13 @@ export const createTasksSlice: StateCreator<TasksSlice, [['zustand/persist', unk
     const title = input.title.trim();
     if (!title) return null;
 
+    const firstNote = input.notes?.trim();
     const task: Task = {
       id: generateId(),
       title,
       size: input.size ?? TASK_DEFAULTS.size,
       category: input.category ?? TASK_DEFAULTS.category,
-      notes: input.notes?.trim() ?? TASK_DEFAULTS.notes,
+      notes: firstNote ? [createNote(firstNote)] : [],
       createdAt: Date.now(),
       completedAt: null,
       scheduledFor: isDayKey(input.scheduledFor) ? input.scheduledFor : TASK_DEFAULTS.scheduledFor,
@@ -47,10 +88,68 @@ export const createTasksSlice: StateCreator<TasksSlice, [['zustand/persist', unk
 
   toggleComplete: (id) => {
     set((state) => ({
-      tasks: state.tasks.map((task) =>
-        task.id === id
-          ? { ...task, completedAt: task.completedAt === null ? Date.now() : null }
-          : task,
+      tasks: mapTask(state.tasks, id, (task) => ({
+        ...task,
+        completedAt: task.completedAt === null ? Date.now() : null,
+      })),
+    }));
+  },
+
+  updateTask: (id, patch, options) => {
+    set((state) => ({
+      tasks: mapTask(state.tasks, id, (task) => {
+        const next: Task = { ...task };
+
+        const title = patch.title?.trim();
+        if (title) next.title = title;
+        if (patch.size) next.size = patch.size;
+        if (patch.category) next.category = patch.category;
+
+        if (patch.scheduledFor !== undefined) {
+          const to = patch.scheduledFor;
+          if (to === null || isDayKey(to)) {
+            next.scheduledFor = to;
+            const today = toDayKey();
+            if (to !== task.scheduledFor && isPostponement(task.scheduledFor, to, today)) {
+              const content = buildRescheduleNote(
+                task.scheduledFor,
+                options?.rescheduleReason ?? '',
+                today,
+              );
+              next.notes = [...task.notes, createNote(content, 'reschedule')];
+            }
+          }
+        }
+        return next;
+      }),
+    }));
+  },
+
+  addNoteToTask: (taskId, content, isPinned = false) => {
+    const text = content.trim();
+    if (!text) return null;
+    const note = createNote(text, 'user', isPinned);
+    set((state) => ({
+      tasks: mapTask(state.tasks, taskId, (task) => ({ ...task, notes: [...task.notes, note] })),
+    }));
+    return note;
+  },
+
+  toggleNotePin: (taskId, noteId) => {
+    set((state) => ({
+      tasks: mapTask(state.tasks, taskId, (task) =>
+        mapNote(task, noteId, (note) => ({ ...note, isPinned: !note.isPinned })),
+      ),
+    }));
+  },
+
+  toggleNoteChecklistItem: (taskId, noteId, lineIndex) => {
+    set((state) => ({
+      tasks: mapTask(state.tasks, taskId, (task) =>
+        mapNote(task, noteId, (note) => ({
+          ...note,
+          content: toggleChecklistLine(note.content, lineIndex),
+        })),
       ),
     }));
   },

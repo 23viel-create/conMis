@@ -1,4 +1,4 @@
-import type { DayKey, Task } from '../../types/task';
+import type { DayKey, Note, Task } from '../../types/task';
 
 /** Half-open range of calendar days: start <= day < end. */
 export interface DayRange {
@@ -35,4 +35,21 @@ export function selectTasksInRange(
       if (dayA !== dayB) return dayA < dayB ? -1 : 1;
       return b.createdAt - a.createdAt;
     });
+}
+
+export type NoteOrder = 'newest' | 'oldest';
+
+/** Pinned notes first, then the rest; both groups follow `order`. */
+export function sortNotes(notes: readonly Note[], order: NoteOrder): Note[] {
+  const byTime = (a: Note, b: Note) =>
+    order === 'newest' ? b.createdAt - a.createdAt : a.createdAt - b.createdAt;
+  return [
+    ...notes.filter((note) => note.isPinned).sort(byTime),
+    ...notes.filter((note) => !note.isPinned).sort(byTime),
+  ];
+}
+
+/** Note shown under the title in lists: newest pinned note, else newest note. */
+export function previewNote(task: Task): Note | undefined {
+  return sortNotes(task.notes, 'newest')[0];
 }

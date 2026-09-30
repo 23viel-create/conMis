@@ -6,11 +6,15 @@ Platform: React Native (Expo SDK 57, Expo Router), TypeScript.
 
 ```
 src/
-├── app/                    # Expo Router routes: _layout.tsx (shell), index.tsx (home)
+├── app/                    # Expo Router routes: _layout.tsx (shell), index.tsx (home),
+│                           # task/[id].tsx (task detail)
 ├── features/               # Vertical slices; each owns its UI, hooks and state
 │   ├── tasks/
-│   │   ├── components/     # TaskList, TaskCard, TaskForm, ...
+│   │   ├── components/     # TaskList, TaskForm, TaskDetailScreen, NoteContent,
+│   │   │                   # SizePicker, CategoryPicker
 │   │   ├── hooks/          # useVisibleTasks (tasks x active timeline view)
+│   │   ├── notes/          # noteMarkdown.ts (checklists, bullets, headings, bold)
+│   │   ├── rescheduling.ts # Postponement rule + reschedule note text
 │   │   ├── store/          # tasksSlice.ts (persisted), migrations.ts
 │   │   ├── selectors.ts    # Pure, memoizable derivations over tasks
 │   │   ├── taskMeta.ts     # Labels/icons for sizes and categories
@@ -34,7 +38,8 @@ src/
 │   └── migrations.ts       # Versioned migrations for persisted state
 ├── services/
 │   └── storage.ts          # Persistence adapter (AsyncStorage now, API later)
-├── lib/                    # polyfills.ts, i18n.ts, dayKey.ts ('YYYY-MM-DD' helpers)
+├── lib/                    # polyfills.ts, i18n.ts, dayKey.ts, dateFormat.ts
+│                           # (Gregorian + Hebrew calendar via Intl)
 ├── locales/                # he.ts (base, defines the keys), en.ts
 ├── types/
 │   └── task.ts             # Domain models (shared across features)
@@ -50,6 +55,12 @@ so they can be unit-tested without React.
 See `src/types/task.ts`. Tasks are planned onto days with `scheduledFor`, a
 local `'YYYY-MM-DD'` day key (not a timestamp, so it never shifts across time
 zones). `null` means unscheduled; such tasks appear on Today.
+
+Each task has a notes log (`Note[]`). Notes change only through note actions
+(`addNoteToTask`, `toggleNotePin`, `toggleNoteChecklistItem`), never through
+`updateTask`. Moving a task to a later day via `updateTask` appends a
+`kind: 'reschedule'` note with the old date (Gregorian + Hebrew) and the
+reason, so postponements can be counted without parsing text.
 
 Persisted data is versioned (`STORAGE_VERSION` in
 `features/tasks/store/migrations.ts`). Any change to the saved shape bumps
